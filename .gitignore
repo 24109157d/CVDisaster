@@ -1,0 +1,37 @@
+# 两条实验线的 CVIAN 数据及预处理结果（只保留在服务器）
+/geolocalization/CVIAN/
+/disaster_perception_mapping/CVIAN/
+/dataset/raw_dataset/
+/dataset/
+/ME CVDisaster/train_results/raw/
+/ME CVDisaster/test_results/raw/
+
+# 原始影像和其他本地数据目录
+/geolocalization/data/
+/disaster_perception_mapping/data/
+
+# 定位训练输出与分类预测结果
+/geolocalization/cvdisaster/
+/disaster_perception_mapping/estimation.txt
+
+# 模型权重、检查点和运行日志
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.keras
+*.safetensors
+*.log
+/logs/
+/train_results/
+/test_results/
+/results/
+
+# Python 缓存和本地环境文件
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+.env
+.env.*
+!.env.example

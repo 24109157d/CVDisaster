@@ -1,0 +1,14 @@
+# CVDisaster-Est：在服务器的另一个 Conda 环境中安装。
+# 作者 README 使用 tensorflow/tensorflow:2.10.1-gpu 容器；这里记录对应基线。
+# GPU/CUDA 兼容性及其余依赖版本尚未在目标服务器验证，安装前参见 ENVIRONMENT.md。
+tensorflow==2.10.1
+gcvit
+tensorflow-addons
+numpy
+scikit-learn
+Pillow
+
+# disaster_perception_mapping/misc 中的辅助脚本使用以下包。
+geojson
+rasterio
+filetype

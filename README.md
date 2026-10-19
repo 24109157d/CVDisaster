@@ -4,16 +4,18 @@
 Authors: Li, Hao, Deuser, Fabian, Yin, Wenping, Luo, Xuanshu, Walther, Paul, Mai, Gengchen, Huang, Wei and Werner, Martin
 
 <p align="center">
-     <img src="./images/overview.png" width="800">
+     <img src="./Author%20CVDisaster/images/overview.png" width="800">
 </p>
 
 CVDisaster is a novel mapping framework that can addressing geolocalization and damage perception estimation using cross-view Street-View Imagery (SVI) and Very High-Resolution satellite imagery at the same time.
+
+本项目的中文环境准备与 GitHub 同步说明见 [ENVIRONMENT.md](ENVIRONMENT.md)。定位实验使用根目录 `requirements.txt`，灾损分类实验使用根目录 `requirements-est.txt`；下方保留作者原有实验说明。
 
 ---
 ### Model architecture
 
 <p align="center">
-     <img src="./images/task_statement.png" width="800">
+     <img src="./Author%20CVDisaster/images/task_statement.png" width="800">
 </p>
 
 CVDisaster consists of two cross-view models:
@@ -26,16 +28,16 @@ Before training, one need to download **the CVIAN dataset** from: [doi:10.14459/
 
 #### For CVDisaster-Geoloc:
 
-1. Install the requirement.txt
+1. Install the dependencies from the repository-root `requirements.txt` (the original `Author CVDisaster/geolocalization/requirement.txt` is retained for reference):
 
     ```bash
-    pip install -r ./geolocalization/requirement.txt
+    python -m pip install -r ./requirements.txt
     ```
 
-2. Put the `CVIAN` dataset into `./geolocalization`. You should have:
+2. Put the `CVIAN` dataset into `./Author CVDisaster/geolocalization`. You should have:
 
    ```
-    geolocalization
+    Author CVDisaster/geolocalization
     ├── 0_prepare_splits_and_data.py
     ├── 1_train_cvdisaster.py
     ├── 2_eval_cvdisaster.py
@@ -58,13 +60,13 @@ Before training, one need to download **the CVIAN dataset** from: [doi:10.14459/
 3. Generate the splits and pre-process the images:
 
     ```bash
-    python ./geolocalization/0_prepare_splits_and_data.py
+    python "./Author CVDisaster/geolocalization/0_prepare_splits_and_data.py"
     ```
 
 4. Training the model:
 
     ```bash
-    python ./geolocalization/1_train_cvdisaster.py
+    python "./Author CVDisaster/geolocalization/1_train_cvdisaster.py"
     ```
 
     Herein, we use a pre-trained Sample4Geo Model please download the CVUSA weights from the [repository](https://github.com/Skyy93/Sample4Geo)
@@ -73,7 +75,7 @@ Before training, one need to download **the CVIAN dataset** from: [doi:10.14459/
 5. Evaluate the model
 
     ```bash
-    python ./geolocalization/2_eval_cvdisaster.py
+    python "./Author CVDisaster/geolocalization/2_eval_cvdisaster.py"
     ```
 
 Again specify the split you want to evaluate, also change the checkpoint\_start parameter in the dataclass to the path of the trained weights.
@@ -82,10 +84,10 @@ Again specify the split you want to evaluate, also change the checkpoint\_start 
 
 ##### Env
 
-1. Put the `CVIAN` dataset into `./disaster_perception_mapping`. You should have:
+1. Put the `CVIAN` dataset into `./Author CVDisaster/disaster_perception_mapping`. You should have:
 
    ```
-    disaster_perception_mapping
+    Author CVDisaster/disaster_perception_mapping
     ├── 1_sat.py
     ├── 1_svi.py
     ├── 2_cv.py
@@ -108,7 +110,7 @@ Again specify the split you want to evaluate, also change the checkpoint\_start 
 2. Prepare docker container
 
     ```bash
-    cd disaster_perception_mapping
+    cd "Author CVDisaster/disaster_perception_mapping"
     docker run -it --gpus device=1 --name gcvit --mount type=bind,source="$(pwd)",target=/root tensorflow/tensorflow:2.10.1-gpu
     ```
 
@@ -150,7 +152,7 @@ CVIAN is the first of this kind dataset that can support both cross-view geoloca
 #### Preview of CVIAN dataset:
 
 <p align="center">
-     <img src="./images/CVIAN.png" width="500">
+     <img src="./Author%20CVDisaster/images/CVIAN.png" width="500">
 </p>
 
 

@@ -102,8 +102,8 @@ INIT_LR = 0.01
 WAMRUP_LR = 0.001
 
 # build dataset
-dirSVI = pathlib.Path('./CVIAN/00_SVI')
-dirSAT = pathlib.Path('./CVIAN/01_Satellite')
+dirSVI = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI')
+dirSAT = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/01_Satellite')
 
 imgCountSVI = len(list(dirSVI.glob('*/*.png')))
 imgCountSAT = len(list(dirSAT.glob('*/*.png')))

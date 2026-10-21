@@ -48,8 +48,8 @@ SAT_IMAGE_SIZE = [SAT_IMG_H, SAT_IMG_W]
 SEED = 626
 
 # build dataset
-dirSVI = pathlib.Path('./CVIAN/00_SVI/')
-dirSAT = pathlib.Path('./CVIAN/01_Satellite/')
+dirSVI = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI')
+dirSAT = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/01_Satellite')
 
 imgCountSVI = len(list(dirSVI.glob('*/*.png')))
 imgCountSAT = len(list(dirSVI.glob('*/*.png')))
@@ -89,11 +89,11 @@ model.load_weights(ckpt_path)
 
 with open('estimation.txt', 'w') as f:
     for name in vaData:
-        path = bytes.decode(name.numpy())[32:]
+        path = os.path.relpath(bytes.decode(name.numpy()), str(dirSVI))
         x0 = np.asarray(Image.open(
-            os.path.join('./data/00_SVI/SVI_ThreeCategories', path), 'r'))
+            os.path.join(str(dirSVI), path), 'r'))
         x1 = np.asarray(Image.open(
-            os.path.join('./data/01_Satellite/SAT_ThreeCategories', path), 'r'))
+            os.path.join(str(dirSAT), path), 'r'))
         if x0.shape == (SVI_IMG_H, SVI_IMG_W, 3) and \
            x1.shape == (SAT_IMG_H, SAT_IMG_W, 3):
             yPred = np.argmax(model.predict((

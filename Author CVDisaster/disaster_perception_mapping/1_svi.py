@@ -64,7 +64,7 @@ except ValueError:  # detect GPUss
 print("Number of Accelerators: ", strategy.num_replicas_in_sync)
 
 # hyperparameters
-data_dir = pathlib.Path('./CVIAN/00_SVI')
+data_dir = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI')
 BATCH_SIZE = 16
 IMG_H = 512
 IMG_W = 1024

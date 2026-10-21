@@ -56,7 +56,7 @@ class Configuration:
     warmup_epochs: int = 1
     lr_end: float = 0.0001             # only for "polynomial"
     # Dataset
-    data_folder = "./CVIAN"
+    data_folder = "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN"
     # Augment Images
     prob_rotate: float = 0.75          # rotates the sat image and ground images simultaneously
     prob_flip: float = 0.5             # flipping the sat image and ground images simultaneously

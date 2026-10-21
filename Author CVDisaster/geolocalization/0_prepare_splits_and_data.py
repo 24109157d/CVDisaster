@@ -9,9 +9,11 @@ import re
 
 print("Aligning images")
 
-geojson_path = 'CVIAN/02_Position/CVIAN_position.geojson'
-svi_dir = 'CVIAN/00_SVI'
-aligned_dir = 'CVIAN/00_SVI_aligned'
+DATA_ROOT = '/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN'
+
+geojson_path = os.path.join(DATA_ROOT, '02_Position', 'CVIAN_position.geojson')
+svi_dir = os.path.join(DATA_ROOT, '00_SVI')
+aligned_dir = os.path.join(DATA_ROOT, '00_SVI_aligned')
 
 os.makedirs(aligned_dir, exist_ok=True)
 
@@ -60,8 +62,8 @@ print("All images have been processed and saved in the aligned directory.")
 print("Starting to generate datasplits")
 
 # Paths
-svi_dir = 'CVIAN/00_SVI_aligned'
-sat_dir = 'CVIAN/01_Satellite'
+svi_dir = os.path.join(DATA_ROOT, '00_SVI_aligned')
+sat_dir = os.path.join(DATA_ROOT, '01_Satellite')
 
 
 svi_files = []
@@ -70,13 +72,13 @@ sat_files = []
 for root, _, files in os.walk(svi_dir):
     for file in files:
         if file.endswith('.png'):
-            relative_path = os.path.relpath(os.path.join(root, file), start='CVIAN')
+            relative_path = os.path.relpath(os.path.join(root, file), start=DATA_ROOT)
             svi_files.append(relative_path)
 
 for root, _, files in os.walk(sat_dir):
     for file in files:
         if file.endswith('.png'):
-            relative_path = os.path.relpath(os.path.join(root, file), start='CVIAN')
+            relative_path = os.path.relpath(os.path.join(root, file), start=DATA_ROOT)
             sat_files.append(relative_path)
 
 if not svi_files:
@@ -109,15 +111,15 @@ percentages = [10, 20, 30, 40, 50, 60]
 for pct in percentages:
     try:
         train_df, val_df = create_splits(df, pct)
-        train_df.to_csv(f'CVIAN/train_{pct}.csv', index=False, header=None)
-        val_df.to_csv(f'CVIAN/val_{pct}.csv', index=False, header=None)
+        train_df.to_csv(os.path.join(DATA_ROOT, f'train_{pct}.csv'), index=False, header=None)
+        val_df.to_csv(os.path.join(DATA_ROOT, f'val_{pct}.csv'), index=False, header=None)
     except ValueError as e:
         print(f"Skipping {pct}% split: {e}")
 
 # Save the 100% evaluation set
-df.to_csv('CVIAN/val_100.csv', index=False, header=None)
+df.to_csv(os.path.join(DATA_ROOT, 'val_100.csv'), index=False, header=None)
 
-positions_gdf = gpd.read_file('CVIAN/02_Position/CVIAN_position.geojson')
+positions_gdf = gpd.read_file(os.path.join(DATA_ROOT, '02_Position', 'CVIAN_position.geojson'))
 
 # Ensure the CRS is set correctly
 positions_gdf = positions_gdf.set_crs(epsg=4326)
@@ -161,7 +163,7 @@ for root, _, files in os.walk(svi_dir):
         if file.endswith('.png'):
             id = extract_id(file)
             if id:
-                relative_path = os.path.relpath(os.path.join(root, file), start='CVIAN')
+                relative_path = os.path.relpath(os.path.join(root, file), start=DATA_ROOT)
                 svi_data.append({'id': id, 'svi_file': relative_path})
 
 # Collect Satellite files
@@ -170,7 +172,7 @@ for root, _, files in os.walk(sat_dir):
         if file.endswith('.png'):
             id = extract_id(file)
             if id:
-                relative_path = os.path.relpath(os.path.join(root, file), start='CVIAN')
+                relative_path = os.path.relpath(os.path.join(root, file), start=DATA_ROOT)
                 sat_data.append({'id': id, 'sat_file': relative_path})
 
 svi_df = pd.DataFrame(svi_data)
@@ -190,7 +192,7 @@ for subarea in range(1, 6):
     train_df = merged_df[
         (merged_df['subarea'] != subarea) | (merged_df['subarea'].isna())
     ][['sat_file', 'svi_file']]
-    train_df.to_csv(f'CVIAN/train_subarea{subarea}.csv', index=False, header=None)
-    val_df.to_csv(f'CVIAN/val_subarea{subarea}.csv', index=False, header=None)
+    train_df.to_csv(os.path.join(DATA_ROOT, f'train_subarea{subarea}.csv'), index=False, header=None)
+    val_df.to_csv(os.path.join(DATA_ROOT, f'val_subarea{subarea}.csv'), index=False, header=None)
 
 print("CSV files have been generated.")

@@ -22,7 +22,7 @@ class Configuration:
     normalize_features: bool = True
     split_key: int = "val100"
     # Dataset
-    data_folder = "./CVIAN"
+    data_folder = "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN"
     # Checkpoint to start from
     checkpoint_start = "weights_e40_98.6830.pth"
     # set num_workers to 0 if on Windows

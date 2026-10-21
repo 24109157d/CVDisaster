@@ -7,12 +7,13 @@ from PIL import Image
 
 TILE_W = 512
 TILE_H = 512
+DATA_ROOT = '/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN'
 
 
 def GetSatelliteRange() -> list:
     res = []
-    for fileName in os.listdir('./data/01_Satellite'):
-        currName = os.path.join('./data/01_Satellite', fileName)
+    for fileName in os.listdir(os.path.join(DATA_ROOT, '01_Satellite')):
+        currName = os.path.join(os.path.join(DATA_ROOT, '01_Satellite'), fileName)
         if os.path.isfile(currName):
             with rasterio.open(currName) as tif:
                 res.append({
@@ -28,7 +29,7 @@ def CutSTLImages(
     tifInfos: list,
     saveTif=False
 ) -> None:
-    with open('./data/02_SVOI_point/SVI_position.geojson', 'r') as f:
+    with open(os.path.join(DATA_ROOT, '02_Position', 'CVIAN_position.geojson'), 'r') as f:
         mappings = geojson.load(f)["features"]
     for sviImageName in os.listdir(srcDirSVI):
         sviPoint = sviImageName[:-4].split('.')[0]
@@ -55,20 +56,20 @@ def CutSTLImages(
                                 img.save(os.path.join(tarDirSTL, sviPoint + '.png'))
 
 
-os.mkdir('./data/01_Satellite/')
-os.mkdir('./data/01_Satellite/0_MinorDamage')
-os.mkdir('./data/01_Satellite/1_ModerateDamage')
-os.mkdir('./data/01_Satellite/2_SevereDamage')
+os.makedirs(os.path.join(DATA_ROOT, '01_Satellite'), exist_ok=True)
+os.mkdir(os.path.join(DATA_ROOT, '01_Satellite', '0_MinorDamage'))
+os.mkdir(os.path.join(DATA_ROOT, '01_Satellite', '1_ModerateDamage'))
+os.mkdir(os.path.join(DATA_ROOT, '01_Satellite', '2_SevereDamage'))
 tifInfos = GetSatelliteRange()
 CutSTLImages(
-    './data/00_SVI/0_MinorDamage',
-    './data/01_Satellite/0_MinorDamage',
+    os.path.join(DATA_ROOT, '00_SVI', '0_MinorDamage'),
+    os.path.join(DATA_ROOT, '01_Satellite', '0_MinorDamage'),
     tifInfos)
 CutSTLImages(
-    './data/00_SVI/1_ModerateDamage',
-    './data/01_Satellite/1_ModerateDamage',
+    os.path.join(DATA_ROOT, '00_SVI', '1_ModerateDamage'),
+    os.path.join(DATA_ROOT, '01_Satellite', '1_ModerateDamage'),
     tifInfos)
 CutSTLImages(
-    './data/00_SVI/2_SevereDamage',
-    './data/01_Satellite/2_SevereDamage',
+    os.path.join(DATA_ROOT, '00_SVI', '2_SevereDamage'),
+    os.path.join(DATA_ROOT, '01_Satellite', '2_SevereDamage'),
     tifInfos)

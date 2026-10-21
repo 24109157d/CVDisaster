@@ -3,12 +3,12 @@ import filetype
 
 # RFC image file extensions supported by TensorFlow
 img_exts = {"png", "jpg", "gif", "bmp"}
-# path = Path("../CVIAN/00_SVI/0_MinorDamage")
-# path = Path("../CVIAN/00_SVI/1_ModerateDamage")
-# path = Path("../CVIAN/00_SVI/2_SevereDamage")
-# path = Path("../CVIAN/01_Satellite/0_MinorDamage")
-# path = Path("../CVIAN/01_Satellite/1_ModerateDamage")
-path = Path("../CVIAN/01_Satellite/2_SevereDamage")
+# path = Path("/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI/0_MinorDamage")
+# path = Path("/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI/1_ModerateDamage")
+# path = Path("/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI/2_SevereDamage")
+# path = Path("/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/01_Satellite/0_MinorDamage")
+# path = Path("/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/01_Satellite/1_ModerateDamage")
+path = Path("/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/01_Satellite/2_SevereDamage")
 for file in path.iterdir():
     if file.is_dir():
         continue

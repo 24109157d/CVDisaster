@@ -1,0 +1,58 @@
+# CVDisaster-Geoloc environment snapshot, 2026-10-25.
+# Linux x86_64 / Python 3.10.22; CPU project checks passed in Slurm job 3766277.
+# GPU not tested. CUDA 11.6 torch wheels require the official cu116 source or local wheels.
+# Python user site disabled with PYTHONNOUSERSITE=1.
+# Converted local wheel URLs in pip freeze to exact version pins.
+albumentations==1.3.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+click==8.5.0
+cloudpickle==3.1.2
+filelock==4.1.0
+fsspec==2026.9.0
+geopandas==1.1.4
+hf-xet==1.5.0
+huggingface-hub==0.36.2
+idna==3.20
+imageio==2.38.0
+joblib==1.6.0
+lazy-loader==0.6
+markdown-it-py==4.2.0
+mdurl==0.1.2
+networkx==3.4.2
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+packaging==26.3
+pandas==2.3.3
+pillow==12.3.0
+pygments==2.21.0
+pyogrio==0.13.0
+pyproj==3.7.1
+python-dateutil==3.0.0
+pytz==2026.5
+pyyaml==6.0.3
+qudida==0.0.4
+regex==2026.9.29
+requests==2.34.2
+rich==15.0.0
+safetensors==0.8.0
+scikit-image==0.24.0
+scikit-learn==1.2.1
+scipy==1.10.0
+shapely==2.1.2
+shellingham==1.5.4
+simsimd==6.5.16
+six==1.17.0
+threadpoolctl==3.7.0
+tifffile==2025.5.10
+timm==0.8.19.dev0
+tokenizers==0.13.3
+tomli==2.5.0
+torch==1.13.1+cu116
+torchvision==0.14.1+cu116
+tqdm==4.70.1
+transformers==4.27.0
+truststore==0.10.5
+typing-extensions==4.16.0
+tzdata==2026.5
+urllib3==2.8.0

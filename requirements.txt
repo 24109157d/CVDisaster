@@ -1,15 +1,23 @@
 # CVDisaster-Geoloc：在服务器的独立 Conda 环境中安装。
 # 基于作者 geolocalization/requirement.txt，补齐当前代码直接使用的依赖。
-# 此文件是待服务器验证的环境清单，不是经过锁定和实测的版本快照。
-torch>=1.13.1
-timm>=0.8.8
-scipy>=1.10.0
-albumentations>=1.3.0
-scikit-learn>=1.2.1
-transformers>=4.27.0
-pandas
-tqdm
-numpy
-Pillow
-opencv-python-headless
-geopandas
+# 2026-10-25：已在 hpxg 完成依赖安装和 CPU 项目验证；GPU 尚未验证。
+# 已有 PyTorch 栈保持原样；新环境的 cu116 包需使用官方 wheel 源或本地 wheel。
+torch==1.13.1+cu116
+torchvision==0.14.1+cu116
+timm==0.8.19.dev0
+# 以下四项采用作者列出的最低版本。
+scipy==1.10.0
+albumentations==1.3.0
+scikit-learn==1.2.1
+transformers==4.27.0
+pandas==2.3.3
+tqdm==4.70.1
+numpy==1.26.4
+Pillow==12.3.0
+opencv-python-headless==4.11.0.86
+geopandas==1.1.4
+# timm 及模型下载所需依赖；完整快照见 requirements-geoloc.lock.txt。
+huggingface-hub==0.36.2
+hf-xet==1.5.0
+safetensors==0.8.0
+PyYAML==6.0.3

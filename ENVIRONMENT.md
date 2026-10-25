@@ -2,7 +2,7 @@
 
 ## 文档定位与当前状态
 
-本文件记录两条原作者实验线的环境准备步骤和检查点。当前只依据仓库代码、原 README 和武汉大学集群使用文档整理依赖，尚未在目标服务器安装或验证。`requirements.txt`、`requirements-est.txt` 是环境清单，不是精确锁定的可运行环境快照；服务器的 Python、GPU 驱动、CUDA、可用 Conda 路径和 Slurm 账号仍待核实。验证后再记录确切版本与运行结果。
+本文件记录两条原作者实验线的环境准备步骤和检查点。定位环境于 2026-10-25 通过免费 `hpxg` 分区完成依赖补装与 CPU 项目验证，结果记录在第五节。根目录 `requirements.txt` 已固定本次验证的定位依赖版本，完整 53 包版本快照见 `requirements-geoloc.lock.txt`；分类独立环境 `cvdisaster_est` 也已完成安装、依赖检查和 CPU 项目验证，结果见第六节，直接依赖入口为 `requirements-est.txt`。GPU 驱动、GPU 运行和训练结果尚未验证。
 
 本地只修改代码、文档并管理 Git 版本。数据集、预训练权重、Conda 环境和训练产物放在服务器。两个实验线分别使用 Conda 环境，以免 PyTorch 和 TensorFlow 的依赖互相影响。密码、访问令牌及其他凭据不得写入仓库或命令示例。
 
@@ -36,37 +36,36 @@ git pull --ff-only origin main
 git rev-parse HEAD
 ```
 
-服务器项目绝对路径尚未确认；不得沿用其他项目的目录。数据集、权重及训练输出不通过 GitHub 传输。根目录 `.gitignore` 已排除两条实验线的数据目录、权重和主要训练产物；加入新类型的大文件前仍须检查 `git status`，必要时补充规则。忽略规则只作用于尚未纳入 Git 的文件。
+服务器项目路径为 `/scratch/liuzeyu/heyinxi/CVDisaster`。数据集、权重及训练输出不通过 GitHub 传输。根目录 `.gitignore` 已排除两条实验线的数据目录、权重和主要训练产物；加入新类型的大文件前仍须检查 `git status`，必要时补充规则。忽略规则只作用于尚未纳入 Git 的文件。
 
 ## 三、服务器环境创建与安装
 
-先在服务器确认 `conda --version`、`python --version`、`nvidia-smi`、可用磁盘空间，以及集群对登录节点和软件安装的规定。下面以 Python 3.10 作为待验证的创建基线，环境名称仅用于区分两条实验线；若服务器 CUDA/驱动或软件策略不匹配，先调整清单与文档，再安装。所有命令在服务器执行。
+定位环境的 Python 3.10.22 和依赖 CPU 运行已核实；分类环境使用 Python 3.10.22，已通过 CPU 项目验证。新建环境前应确认集群调度规则、存储空间和 GPU 软件栈；若需要改变依赖版本，先与用户确认。以下命令在服务器执行。
 
 ### 3.1 定位实验
 
-从仓库根目录执行：
+现有 `cvdisaster_geoloc` 环境及 PyTorch 已安装，不要重复创建环境或重装 PyTorch。本次剩余依赖通过 `/scratch/liuzeyu/heyinxi/torch-install/install_remaining.sbatch` 离线安装，具体版本和日志见第五节。需补装时先核对当前环境和任务状态，避免重复提交安装任务。
 
 ```bash
-conda create -n cvdisaster_geoloc python=3.10
 conda activate cvdisaster_geoloc
-python -m pip install -r requirements.txt
-python -c "import torch, timm, albumentations, cv2, geopandas, transformers; print(torch.__version__, torch.cuda.is_available())"
+cd /scratch/liuzeyu/heyinxi/torch-install
+squeue -u "$USER"
+# 导入和计算验证通过 Slurm 运行，不在登录节点直接执行。
 ```
 
-`torch.cuda.is_available()` 应在所申请的 GPU 计算节点上检查；登录节点上显示 `False` 不能单独说明训练环境不可用。PyTorch 安装包与目标 CUDA 的匹配方式待服务器检查后确定。本步骤不在本地安装这些依赖。
+`torch.cuda.is_available()` 应在所申请的 GPU 计算节点上检查；登录节点上显示 `False` 不能单独说明训练环境不可用。现有 PyTorch 是 CUDA 11.6 构建，本次补装保持原样；GPU 驱动匹配和实际 GPU 运行仍待验证。本步骤不在本地安装这些依赖。
 
 ### 3.2 灾损分类实验
 
-从仓库根目录执行：
+独立环境 `cvdisaster_est` 已完成安装和 CPU 项目验证，具体版本、日志及验证范围见第六节。无需重复创建环境或重装依赖。
 
 ```bash
-conda create -n cvdisaster_est python=3.10
 conda activate cvdisaster_est
-python -m pip install -r requirements-est.txt
-python -c "import tensorflow as tf, gcvit, tensorflow_addons, sklearn, geojson, rasterio, filetype; print(tf.__version__, tf.config.list_physical_devices('GPU'))"
+cd /scratch/liuzeyu/heyinxi/CVDisaster
+# 运行前先通过 GitHub 同步代码，导入和计算检查通过 Slurm 执行。
 ```
 
-作者使用的是 `tensorflow/tensorflow:2.10.1-gpu` 容器，这不等于上述 Conda 安装已经具备相同的 CUDA/cuDNN 运行环境。应先核实集群支持的 GPU 软件栈，再确认安装方式及版本；GPU 可见性也应在计算节点检查。不要在登录节点运行训练或大规模预处理。
+作者使用 `tensorflow/tensorflow:2.10.1-gpu` 容器。改用 Conda 后，本次为 Est 环境单独安装 CUDA 11.2.2、cuDNN 8.1.0.77，并配置环境内的动态库路径；定位环境保持原样。`requirements-est.txt` 是直接依赖入口，`constraints-est.txt` 固定兼容版本。实际 GPU 运行仍须在 GPU 计算节点验证。
 
 ## 四、数据、权重与工作目录检查
 
@@ -104,7 +103,40 @@ test -d CVIAN/01_Satellite
 
 ## 五、环境验证记录
 
+### 2026-10-25 定位依赖 CPU 验证通过（GPU 未验证）
+
+- 服务器仓库：`/scratch/liuzeyu/heyinxi/CVDisaster`。
+- Conda 环境：`/scratch/liuzeyu/anaconda3/envs/cvdisaster_geoloc`；Python 实测为 `3.10.22`。测试代码提交号为 `9d6b5478b68b73600f453633d7eaaa0fb64a07a6`。
+- 保留原有 `torch==1.13.1+cu116`、`torchvision==0.14.1+cu116`、`timm==0.8.19.dev0`，安装计划不包含这三个包。
+- SciPy、Albumentations、scikit-learn、Transformers 采用作者要求中的最低版本，分别为 `1.10.0`、`1.3.0`、`1.2.1`、`4.27.0`；NumPy 固定为 `1.26.4`。
+- 官方 PyPI 在本机可达，在登录节点连接超时。本机从官方 PyPI 下载 47 个 Linux / CPython 3.10 wheel 并生成 SHA256，后追加 `hf-xet==1.5.0`，合计 48 个；超算从阿里云镜像下载相同版本，所有文件与官方包的 SHA256 一致。未修改全局 pip 源配置。
+- 安装目录：`/scratch/liuzeyu/heyinxi/torch-install/`；wheel 在 `remaining-wheels/`，哈希清单为 `remaining-wheels/SHA256SUMS`。
+- 安装脚本：`install_remaining.sbatch`、`install_remaining.py`；检查脚本：`verify_remaining.py`。脚本先离线解析，再拒绝任何涉及 torch、torchvision、timm 的变更，仅对剩余计划执行 `--no-index --no-deps` 安装。
+- 第一次任务 `3766020` 因 SHA256 清单的 Windows 换行在校验阶段退出，未安装任何包；修正换行后提交 `3766022`，节点 `n0334`，免费 `hpxg`，2 CPU、8 GiB 内存。
+- `3766022` 成功安装 40 个缺失包，并通过 `pip check`。项目导入检查发现 `/home/liuzeyu/.local/lib/python3.10/site-packages/transformers` 的不完整残留遮住环境内完整的 Transformers，任务因验证失败而退出；这不是已安装版本之间的依赖冲突。
+- 已通过 `conda env config vars set --prefix /scratch/liuzeyu/anaconda3/envs/cvdisaster_geoloc PYTHONNOUSERSITE=1` 为本环境隔离用户目录。当前已激活的终端需要 `conda deactivate` 后重新 `conda activate cvdisaster_geoloc` 才能应用设置。批处理脚本显式 `export PYTHONNOUSERSITE=1`。
+- 用户目录原先提供的 `hf-xet==1.5.0` 已以同一版本补入环境。最终任务 `3766277` 在 `n0334` 完成，状态 `COMPLETED`、退出码 `0:0`、耗时 `00:17:57`；未重装前述 40 个包或 PyTorch 栈。
+- 日志：`install-remaining-3766022.log`、`install-remaining-3766277.log`；离线解析结果：`resolve-offline.json`。
+- 已通过：隔离环境中的 `pip check`（`No broken requirements found.`）、依赖导入与实际路径、NumPy/PyTorch 转换、Safetensors 张量读写、torchvision CPU NMS、地理坐标转换、GeoJSON 读取、空间连接、项目模块导入、训练/验证图像变换、无预训练权重下载的 ConvNeXt CPU 前向计算。最终标记为 `GEOLOC_DEPENDENCIES_VERIFIED_CPU`。GPU 与实际训练尚未验证。
+- 原始快照：安装目录中的 `requirements-geoloc-freeze.txt`。该文件含本地 wheel 路径；仓库 `requirements-geoloc.lock.txt` 将其转换为精确版本号，记录 53 个包，用于复现本次环境。主入口 `requirements.txt` 列出定位直接依赖与已保护的 PyTorch 栈。安装目录另保存完整版本快照；依赖清单与环境记录按 GitHub 同步流程提交。
+
 服务器环境确认后，为每条实验线记录：Git 提交号、Conda 环境名与 Python 版本、`python -m pip freeze` 输出、GPU/驱动/CUDA 信息、数据集来源与校验结果、预训练权重来源、导入检查结果，以及首次小规模运行的日志位置。记录中不得包含凭据。只有完成对应计算节点的导入和 GPU 检查，才能将该环境标记为“已验证”。
+
+## 六、Est 独立 Conda 环境配置记录（CPU 验证通过，2026-10-25）
+
+不用 Docker 本身不要求修改模型代码。当前保留作者的 TensorFlow 2.10.1，使用独立环境 `/scratch/liuzeyu/anaconda3/envs/cvdisaster_est`，与定位环境隔离。模型代码尚未因本次安装修改；实际运行仍需数据集、预训练权重和合适的 Slurm 资源。
+
+- 原始依据：作者 README 的 `tensorflow/tensorflow:2.10.1-gpu` 镜像；[TensorFlow 构建兼容表](https://www.tensorflow.org/install/source#gpu) 的 2.10 系列使用 Python 3.7–3.10、CUDA 11.2、cuDNN 8.1；[Addons 兼容表](https://github.com/tensorflow/addons#c-custom-op-compatibility-matrix) 中 0.18.0 对应 TensorFlow 2.10。
+- Python 3.10.22、TensorFlow 2.10.1、Keras 2.10.0、GCViT 1.1.6、Addons 0.18.0、NumPy 1.23.5；其余历史接口约束见 `constraints-est.txt`。作者未锁定的间接依赖按该基线选择，未升级作者指定的 TensorFlow。
+- 安装工作目录：`/scratch/liuzeyu/heyinxi/est-install/`。Python 包使用官方 PyPI 下载的 104 个 Linux wheel 生成 SHA256，超算从镜像下载并核对同一哈希。
+- GPU 运行库从 conda-forge 官方源下载：`cudatoolkit-11.2.2-hc23eb0c_13.conda`（官方 SHA256 核对），`cudnn-8.1.0.77-h90431f1_0.tar.bz2`（官方历史包仅提供 MD5，已核对）。已安装到 Est 环境，未改定位环境。
+- 首次创建任务 `3767461` 因缓存中旧版 Conda wheel 是 Python 3.9 构建而解析失败。新任务 `3767475` 复用定位环境的 32 个 Conda 基础运行包显式创建 Python 3.10 环境，状态 `COMPLETED`、退出码 `0:0`、耗时 `00:30:50`；没有复制其 pip 包或 PyTorch。
+- `create_est.sbatch` 创建环境并设置 `PYTHONNOUSERSITE=1`。`install_est.sbatch` 离线安装 CUDA/cuDNN、配置本环境库路径、安装 pip 依赖并验证，使用免费 `hpxg`；安装和 CPU 测试均在该分区完成。
+- 安装及验证任务 `3767479`，状态 `COMPLETED`、退出码 `0:0`、耗时 `02:21:26`，节点 `n0358`，2 CPU、8 GiB 内存。CUDA/cuDNN 已安装，104 个 wheel 哈希复核通过，离线解析成功，102 个 Python 包已安装成功，`pip check` 已输出 `No broken requirements found.`，CPU 运行验证已通过。日志为安装目录中的 `install-est-3767479.log`；本轮未下载或安装 torch、torchvision、timm。
+- 已通过：隔离环境中的 `pip check`；TensorFlow/Addons/GCViT、NumPy、scikit-learn、Pillow、GeoJSON、Rasterio、filetype、h5py 导入和实际路径；TensorFlow CUDA 构建版本；CUDA 动态库加载与 cuDNN 版本 `8100`；Addons GELU 和 TensorFlow 矩阵计算；PNG 解码、GeoJSON/GeoTIFF 读写；原代码 WarmUpCosine；双分支 GCViT CPU 前向和 H5 权重保存/加载。模型测试使用合成的 224×224 输入、无预训练下载，没有启动原脚本训练。模型验证标记为 `EST_COUPLED_GCVIT_FORWARD_H5_OK`，最终标记为 `EST_DEPENDENCIES_VERIFIED_CPU`。
+- 该验证在无 GPU 的 `n0358` 上执行，缺少 NVIDIA 驱动的提示符合 CPU 节点条件。TensorRT 是可选功能，当前未安装，也没有测试 TF-TRT。实际 GPU 运行、原始大分辨率输入及真实训练仍待计算节点实验验证。
+- 版本快照：安装目录保存 `requirements-est-freeze.txt`；仓库 `requirements-est.lock.txt` 固定 104 个 Python 包的精确版本，去除了本地 wheel 路径。CUDA/cuDNN 由 Conda 管理，单独记录于上文。测试所用源代码提交为 `9d6b5478b68b73600f453633d7eaaa0fb64a07a6`。
+- 本次代码和依赖清单仍按本地修改 → GitHub → 超算拉取同步；安装辅助文件放在安装目录，不直接覆盖超算仓库源码。
 
 
 

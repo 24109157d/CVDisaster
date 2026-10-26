@@ -138,7 +138,7 @@ test -d CVIAN/01_Satellite
 - 版本快照：安装目录保存 `requirements-est-freeze.txt`；仓库 `requirements-est.lock.txt` 固定 104 个 Python 包的精确版本，去除了本地 wheel 路径。CUDA/cuDNN 由 Conda 管理，单独记录于上文。测试所用源代码提交为 `9d6b5478b68b73600f453633d7eaaa0fb64a07a6`。
 - 本次代码和依赖清单仍按本地修改 → GitHub → 超算拉取同步；安装辅助文件放在安装目录，不直接覆盖超算仓库源码。
 
-## 七、完整 GPU 训练任务（2026-10-26 准备）
+## 七、完整 GPU 训练任务（2026-10-26 已提交，等待调度）
 
 用户指定两条实验线均直接完整训练，固定资源为 `a100x4`、`wanyi`、单节点、单任务、8 CPU、1 GPU。脚本为 `slurm/train_geoloc.sbatch` 和 `slurm/train_est.sbatch`，额外设置内存 60000 MB（分区每 GPU 上限）和最长 7 天。未调整作者模型代码、批量大小、学习率或训练轮数。
 
@@ -147,4 +147,15 @@ test -d CVIAN/01_Satellite
 - 两份脚本均先执行实际 GPU 矩阵计算，失败立即退出，不回退 CPU。使用各自 Conda 环境，不加载案例的 CUDA 12.2。
 - 日志：`/scratch/liuzeyu/heyinxi/logs/geoloc-<JobID>.log`、`est-<JobID>.log`。使用提交时指定的 `CVDISASTER_COMMIT` 创建代码运行副本，产物放在 `/scratch/liuzeyu/heyinxi/runs/geoloc-<JobID>/`、`est-<JobID>/`，源码仓库不接收训练输出。
 - 预训练文件统一放在 `/scratch/liuzeyu/heyinxi/pretrained/`。Geoloc 的 CVUSA 权重来自作者 README 指向的 [Sample4Geo](https://github.com/Skyy93/Sample4Geo) Google Drive `pretrained.zip`；GCViT Tiny 权重来自安装包指定的 [v1.1.1 发布文件](https://github.com/awsaf49/gcvit-tf/releases/download/v1.1.1/gcvit_tiny_weights.h5)。ConvNeXt 初始化使用 timm 指定的官方 Hugging Face 仓库，固定快照 `2b2698d86523262ca8065d0957c7f80d963bb43f`。计算节点使用已下载缓存。
-- 当前状态：脚本本地 Bash 语法检查通过；预训练文件下载及传输中，尚未提交训练。JobID 和实际启动结果待提交后补充。
+- 提交代码：`4785bbc03c5d604a0b00dc01e2cfdede04eae0b0`，本地已推送 GitHub，用户在超算拉取后核对一致。未使用 Git bundle。
+- 三份预训练文件已到位并校验：CVUSA `weights_e40_98.6830.pth` SHA256 `739cf00d303836fba1195f1bb8d54c4b13c53926ce3212fc9ceced335fc59a23`；ConvNeXt `model.safetensors` SHA256 `bc0cfafc7d7755e8271f51343c4374725bf6409c0434e64028a863c4aca7d9fe`（与官方 Hub LFS 元数据一致）；GCViT `gcvit_tiny_weights.h5` SHA256 `90bf9bfaafd086a831e92edbbfbba9450fd56786c2d39b3ac3f215d0cef54768`。来源和哈希清单保存在超算 `pretrained/pretrained-manifest.json`。
+- Est JobID：`3780573`，提交后为 `PENDING (AssocGrpCpuLimit)`；Geoloc JobID：`3780728`，提交后为 `PENDING (Priority)`。提交记录分别在 `runs/est-4785bbc-submission.txt`、`runs/geoloc-4785bbc-submission.txt`。这是正式完整训练任务；此前 `sbatch --test-only` 仅作资源校验，没有启动测试训练。
+- 两份脚本本地 Bash 语法检查和 Slurm 资源试算通过。排队期间尚未执行脚本内 GPU 检查、Geoloc 预处理或训练/推理，因此不能宣称 GPU 流程启动成功。Slurm 预计开始时间可能变化，以 `squeue` 为准。
+
+```bash
+squeue -j 3780573,3780728
+squeue --start -j 3780573,3780728
+# 开始运行后查看日志，寻找 EST_GPU_OK、GEOLOC_GPU_OK 和实际训练进度。
+tail -n 50 /scratch/liuzeyu/heyinxi/logs/est-3780573.log
+tail -n 50 /scratch/liuzeyu/heyinxi/logs/geoloc-3780728.log
+```

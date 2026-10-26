@@ -138,5 +138,13 @@ test -d CVIAN/01_Satellite
 - 版本快照：安装目录保存 `requirements-est-freeze.txt`；仓库 `requirements-est.lock.txt` 固定 104 个 Python 包的精确版本，去除了本地 wheel 路径。CUDA/cuDNN 由 Conda 管理，单独记录于上文。测试所用源代码提交为 `9d6b5478b68b73600f453633d7eaaa0fb64a07a6`。
 - 本次代码和依赖清单仍按本地修改 → GitHub → 超算拉取同步；安装辅助文件放在安装目录，不直接覆盖超算仓库源码。
 
+## 七、完整 GPU 训练任务（2026-10-26 准备）
 
+用户指定两条实验线均直接完整训练，固定资源为 `a100x4`、`wanyi`、单节点、单任务、8 CPU、1 GPU。脚本为 `slurm/train_geoloc.sbatch` 和 `slurm/train_est.sbatch`，额外设置内存 60000 MB（分区每 GPU 上限）和最长 7 天。未调整作者模型代码、批量大小、学习率或训练轮数。
 
+- Geoloc：ConvNeXt Base、`subarea5`、batch 128、10 轮，执行作者预处理后训练，每轮评估。原始数据已存在；首次检查未发现对齐图像、划分 CSV 或预训练权重。脚本明确要求划分不存在，再运行作者预处理；重复实验前需确认是否保留已有划分并调整该步骤，禁止直接重复预处理覆盖输入。
+- Est：`2_cv.py --tr-ratio 0.5 --backbone tiny`，batch 12、200 轮，训练末尾验证；成功后执行 `3_estimation.py --backbone tiny` 生成逐图推理结果。不包含额外的 SVI/SAT 单视角对照实验。
+- 两份脚本均先执行实际 GPU 矩阵计算，失败立即退出，不回退 CPU。使用各自 Conda 环境，不加载案例的 CUDA 12.2。
+- 日志：`/scratch/liuzeyu/heyinxi/logs/geoloc-<JobID>.log`、`est-<JobID>.log`。使用提交时指定的 `CVDISASTER_COMMIT` 创建代码运行副本，产物放在 `/scratch/liuzeyu/heyinxi/runs/geoloc-<JobID>/`、`est-<JobID>/`，源码仓库不接收训练输出。
+- 预训练文件统一放在 `/scratch/liuzeyu/heyinxi/pretrained/`。Geoloc 的 CVUSA 权重来自作者 README 指向的 [Sample4Geo](https://github.com/Skyy93/Sample4Geo) Google Drive `pretrained.zip`；GCViT Tiny 权重来自安装包指定的 [v1.1.1 发布文件](https://github.com/awsaf49/gcvit-tf/releases/download/v1.1.1/gcvit_tiny_weights.h5)。ConvNeXt 初始化使用 timm 指定的官方 Hugging Face 仓库，固定快照 `2b2698d86523262ca8065d0957c7f80d963bb43f`。计算节点使用已下载缓存。
+- 当前状态：脚本本地 Bash 语法检查通过；预训练文件下载及传输中，尚未提交训练。JobID 和实际启动结果待提交后补充。

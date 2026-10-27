@@ -159,3 +159,11 @@ squeue --start -j 3780573,3780728
 tail -n 50 /scratch/liuzeyu/heyinxi/logs/est-3780573.log
 tail -n 50 /scratch/liuzeyu/heyinxi/logs/geoloc-3780728.log
 ```
+
+## 八、本机文件存放与权重清理（2026-10-27）
+
+本项目所有本机文件均保存在 `D:\CVDisaster` 内，后续不得在 D 盘根目录另建本项目的临时目录。此前的 `D:\CVDisaster-geoloc-install`、`D:\CVDisaster-est-install`、`D:\CVDisaster-run-logs` 已移入项目内 `.local-cache/` 对应子目录，并由 `.gitignore` 排除；保留的安装脚本、离线包和历史日志属于安装缓存。
+
+已重新核对超算三份预训练权重，SHA256 与第七节记录完全一致。随后删除本机的 CVUSA 权重、GCViT Tiny 权重、ConvNeXt 初始化权重及 Sample4Geo 压缩包，合计释放 2,444,349,939 字节（约 2.28 GiB）。超算 `/scratch/liuzeyu/heyinxi/pretrained/` 内的文件保持不变，已提交任务继续使用该目录。
+
+权重和数据不上传 GitHub；GitHub 仅保存代码、依赖清单、文件来源、哈希与实验记录。本机中转用于超算无法直接获取的文件，优先在超算下载，传输校验完成后清理中转文件。

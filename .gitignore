@@ -28,6 +28,8 @@
 /results/
 
 # Python 缓存和本地环境文件
+# 本项目的本机安装缓存统一保存在项目内，不上传 GitHub。
+/.local-cache/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/

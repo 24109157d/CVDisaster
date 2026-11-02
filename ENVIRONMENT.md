@@ -175,3 +175,11 @@ tail -n 50 /scratch/liuzeyu/heyinxi/logs/geoloc-3780728.log
 已执行 `scancel 3802343` 取消尚未运行的 Geoloc smoke，并执行 `scontrol release 3780573 3780728` 恢复原完整任务。没有重新提交训练副本、重装依赖或修改训练超参数。仍使用原始提交 `4785bbc03c5d604a0b00dc01e2cfdede04eae0b0` 的两份完整训练脚本：Geoloc 10 轮，Est 200 轮后推理，每任务 1 GPU、8 CPU、60000 MB 主机内存、最长 7 天。解除挂起后即时状态为 PENDING，需以之后的 Slurm 状态和启动日志确认实际运行，不能据充值或解除挂起推断训练成功。
 
 本次进一步核对发现，两个完整任务重新评估后均为 `PENDING (AssocGrpCpuLimit)`，开始时间 `N/A`，运行时间零，尚未生成训练日志。`sacctmgr` 显示父账号 `wanyi` 的 `GrpCPUs=0`、`GrpTRES=cpu=0,gres/gpu=16`；个人 `liuzeyu` 在 `a100x4` 的限额为 64 CPU / 4 GPU / 2 节点，父账号限额仍阻止调度。当次 `squeue -A wanyi -t R` 没有运行任务，因此应请超算管理员确认充值及父账号 CPU 调度配额恢复情况。未修改账号、配额或 QOS，也不需要为此更改依赖、重复提交或减少 batch。
+
+## 十、取消旧任务并重新提交（2026-11-02）
+
+用户明确要求取消 `3780573`、`3780728` 并各重新提交一次。执行前发现旧 Geoloc 已在 `g0165` 运行，取消时累计 `00:31:05`；日志含 `GEOLOC_GPU_OK 1.13.1+cu116 NVIDIA A100-SXM4-40GB`，说明其 PyTorch 实际 GPU 运算已通过。当时仍在生成 `00_SVI_aligned`，尚未生成正式 `train_subarea5.csv`、`val_subarea5.csv`，未进入训练阶段。旧 Est 尚未训练。已确认两条旧任务取消并退出队列。
+
+按同一份已发布脚本、相同资源配置和源代码提交 `4785bbc03c5d604a0b00dc01e2cfdede04eae0b0` 各提交一次：Est 新 JobID `3952478`，Geoloc 新 JobID `3952479`。提交时两者均为 `PENDING (Priority)`，后续状态以 Slurm 为准，不等同于训练通过。没有重新安装依赖、修改作者模型或调整超参数。
+
+新 Geoloc 将重新完成被中断的对齐预处理；只更新作者脚本生成的派生对齐图像及划分，原始 `00_SVI`、`01_Satellite` 和预训练权重不变。运行副本和正式训练输出使用各自的新 JobID 目录，不覆盖旧任务输出。新日志为 `logs/est-3952478.log`、`logs/geoloc-3952479.log`；提交记录为 `runs/resubmit-full-20261102-est.txt`、`runs/resubmit-full-20261102-geoloc.txt`。此前父账号零 CPU 配额是之前查询时的状态；本次已观察到实际 GPU 分配，不能继续将该旧限额快照作为当前结论。

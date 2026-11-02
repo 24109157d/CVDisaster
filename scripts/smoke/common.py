@@ -94,6 +94,9 @@ def execute(module, work):
         assert os.environ.get('HF_HUB_CACHE') == str(RUNTIME / 'pretrained/huggingface/hub')
     else:
         assert os.environ.get('KERAS_HOME') == str(RUNTIME / 'pretrained/keras')
+        # KERAS_HOME 不控制 Keras 2.10 get_file；显式检查它真正读取的默认缓存。
+        cached = Path.home() / '.keras/datasets/gcvit_tiny_weights.h5'
+        assert cached.is_file() and cached.samefile(ASSETS['gcvit'][0]), '先运行 prepare_est_cache.py 修复默认缓存'
     output = args.output.resolve()
     # 强制所有写入位于独立 smoke 目录；拒绝已有输出，禁止覆盖正式运行目录。
     assert (RUNTIME / 'smoke-tests').resolve() in output.parents, output

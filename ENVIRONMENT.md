@@ -224,3 +224,11 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 - Est 工作副本：`/scratch/liuzeyu/heyinxi/runs/est-3952585/Author CVDisaster/disaster_perception_mapping/`，没有训练权重或推理结果。
 
 本次结果查询没有修改作者代码、batch、优化器、依赖、预训练权重或重新提交任务。后续需先修正 Est 缓存映射，并确认 Geoloc 单卡显存及数据重复问题的处理方案，再进行验证和重跑。
+
+## 十三、修复 Est 默认权重缓存（2026-11-02，验证中）
+
+按用户要求保持本地修改 → 推送 GitHub → 超算拉取 → 执行的流程。新增 `scripts/prepare_est_cache.py`：先核对 scratch 中现有 GCViT 权重的完整 SHA256，再创建 `~/.keras/datasets/gcvit_tiny_weights.h5` 指向该文件的精确软链接。只创建缺失链接，遇到已有普通文件、错误链接或不可写默认缓存目录即报错，不覆盖任何已有内容，不改 HOME 或全局 shell 初始化。
+
+`slurm/train_est.sbatch` 增加只读缓存检查；`scripts/smoke/common.py` 同步检查实际默认缓存，避免仅设置 `KERAS_HOME` 却漏检真实加载路径。作者模型、训练参数和依赖保持原样。下次运行新版 Est sbatch 时，`CVDISASTER_COMMIT` 必须包含新增的缓存检查脚本，不能继续把旧的 `4785bbc` 与新版 sbatch 混用。
+
+新增 `scripts/verify_est_cache.py` 和免费 CPU 分区 `slurm/verify_est_cache.sbatch`：使用现有 Est 环境，验证真实 `tf.keras.utils.get_file` 返回已缓存文件；拦截下载入口，任何下载尝试都会失败；随后以 224×224 CPU 输入初始化 GCViT Tiny、加载已有预训练权重并执行一次前向，检查文件 SHA256 未变。该验证不训练、不改正式输入尺寸、不安装依赖、不申请 GPU，也不代替完整训练的显存及反向传播验证。实际执行结果待核对后补充。

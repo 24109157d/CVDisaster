@@ -25,17 +25,18 @@ export KERAS_HOME=/scratch/liuzeyu/heyinxi/pretrained/keras
 REPO=/scratch/liuzeyu/heyinxi/CVDisaster
 ENV=/scratch/liuzeyu/anaconda3/envs/cvdisaster_est
 DATA=/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN
-COMMIT=${CVDISASTER_COMMIT:?提交时必须通过 --export 传入 CVDISASTER_COMMIT}
+COMMIT=${CVDISASTER_COMMIT:?提交前必须 export CVDISASTER_COMMIT 并使用纯 --export=ALL}
 RUN=/scratch/liuzeyu/heyinxi/runs/est-${SLURM_JOB_ID}
 export PATH="$ENV/bin:$PATH"
 export LD_LIBRARY_PATH="$ENV/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-# GCViT 使用 Keras 默认 datasets 缓存目录；提前下载，计算节点不访问网络。
+# 权重保留在 scratch；Keras 2.10 get_file 的默认 home 缓存通过软链接映射到它。
 test -s "$KERAS_HOME/datasets/gcvit_tiny_weights.h5"
 test -d "$DATA/00_SVI"
 test -d "$DATA/01_Satellite"
 mkdir "$RUN"
-git -C "$REPO" archive "$COMMIT" 'Author CVDisaster/disaster_perception_mapping' | tar -x -C "$RUN"
+git -C "$REPO" archive "$COMMIT" 'Author CVDisaster/disaster_perception_mapping' scripts/prepare_est_cache.py | tar -x -C "$RUN"
+"$ENV/bin/python" -B "$RUN/scripts/prepare_est_cache.py" --check-only
 cd "$RUN/Author CVDisaster/disaster_perception_mapping"
 printf 'COMMIT=%s\nRUN=%s\nDATA=%s\n' "$COMMIT" "$RUN" "$DATA"
 nvidia-smi

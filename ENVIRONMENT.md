@@ -173,3 +173,5 @@ tail -n 50 /scratch/liuzeyu/heyinxi/logs/geoloc-3780728.log
 用户告知已充值，并明确改为直接完整训练、暂不执行 smoke。只读检查确认完整任务 `3780573`、`3780728` 仍为挂起状态且运行时间为零；Geoloc 的正式划分 CSV 尚不存在，预训练文件和原始图像目录仍在。
 
 已执行 `scancel 3802343` 取消尚未运行的 Geoloc smoke，并执行 `scontrol release 3780573 3780728` 恢复原完整任务。没有重新提交训练副本、重装依赖或修改训练超参数。仍使用原始提交 `4785bbc03c5d604a0b00dc01e2cfdede04eae0b0` 的两份完整训练脚本：Geoloc 10 轮，Est 200 轮后推理，每任务 1 GPU、8 CPU、60000 MB 主机内存、最长 7 天。解除挂起后即时状态为 PENDING，需以之后的 Slurm 状态和启动日志确认实际运行，不能据充值或解除挂起推断训练成功。
+
+本次进一步核对发现，两个完整任务重新评估后均为 `PENDING (AssocGrpCpuLimit)`，开始时间 `N/A`，运行时间零，尚未生成训练日志。`sacctmgr` 显示父账号 `wanyi` 的 `GrpCPUs=0`、`GrpTRES=cpu=0,gres/gpu=16`；个人 `liuzeyu` 在 `a100x4` 的限额为 64 CPU / 4 GPU / 2 节点，父账号限额仍阻止调度。当次 `squeue -A wanyi -t R` 没有运行任务，因此应请超算管理员确认充值及父账号 CPU 调度配额恢复情况。未修改账号、配额或 QOS，也不需要为此更改依赖、重复提交或减少 batch。

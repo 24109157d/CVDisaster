@@ -198,3 +198,29 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 ```
 
 后续传递提交号采用上面的写法；不再使用逗号附加显式变量列表。Smoke 方案中的示例提交命令同步修正，未提交 smoke 作业。
+
+## 十二、完整训练执行结果：两项失败（2026-11-02）
+
+22:04 的 Slurm 查询确认，两项任务均已结束，状态 `FAILED`、退出码 `1:0`。没有完成任何训练 epoch，也没有完成一次训练参数更新，没有生成新的训练模型权重。
+
+| 模块 | JobID | 开始 / 结束（北京时间） | 总耗时 | 失败阶段 |
+| --- | --- | --- | --- | --- |
+| Est | 3952585 | 16:12:05 / 16:53:54 | 00:41:49 | 首个 GCViT 分支的预训练权重加载 |
+| Geoloc | 3952586 | 16:16:36 / 17:39:11 | 01:22:35 | 第 1 轮第 1 个 batch 的前向传播 |
+
+### 已验证与失败原因
+
+- 两条任务都通过实际 GPU 矩阵计算：`EST_GPU_OK 2.10.1 ... GPU:0`、`GEOLOC_GPU_OK 1.13.1+cu116 NVIDIA A100-SXM4-40GB`。此前 Slurm 用户环境获取问题已越过。
+- Est 已识别 A100，加载 cuDNN 8100，进入双分支模型构建；随后 GCViT 调用 Keras `get_file`，试图下载 `gcvit_tiny_weights.h5`，计算节点无法解析外网域名，报 `socket.gaierror: [Errno -2] Name or service not known` 并退出。实际预训练文件仍保存在 `pretrained/keras/datasets/`。本机缓存的 Keras 2.10.0 源码确认：`get_file(cache_dir=None)` 默认使用 `~/.keras`（不可写时使用 `/tmp/.keras`），并不读取此处设置的 `KERAS_HOME`；当次默认 home datasets 目录没有对应文件。这是本次缓存映射配置未对准实际加载器的问题，不能认定为权重丢失，也不能将可选 TensorRT/ptxas 提示当作最终异常原因。没有进入 `model.fit`，没有生成 `0.5_bestCV.h5` 或 `estimation.txt`。
+- Geoloc 完成图像对齐、划分、ConvNeXt Base/CVUSA 权重加载、GPU 特征提取、训练前 zero-shot 评估及相似性采样。在第 1 轮首个 batch 前向传播时，单张 A100 40GB 无法容纳作者默认 batch 128：已分配 37.54 GiB，只余 215.31 MiB，再申请 576 MiB 导致 `torch.cuda.OutOfMemoryError`。已保留的显存与实际已分配显存接近，日志没有证据支持仅靠处理显存碎片即可解决。未完成第一个训练 batch，不能把模型初始化或 zero-shot 评估称为微调成功。
+
+### 本次实际生成的文件与初步指标
+
+- 原始数据根目录：`/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/`。生成 `00_SVI_aligned/` 内 4121 张派生对齐图像和根目录 23 个 CSV 划分文件；原始图像目录作为输入使用。
+- 当前 subarea5 CSV：训练 3977 行、验证 268 行。只读核查得到训练唯一 ID 3854 个、验证唯一 ID 267 个，分别有 123 行和 1 行重复 ID，两个集合的 ID 无交叉。后续需核查作者空间连接生成重复行的原因，不能将 CSV 行数直接当作不同图像数量。
+- Geoloc 训练前验证集 zero-shot 结果：Recall@1 35.8209%、Recall@5 51.1194%、Recall@10 60.8209%、作者日志的 top1% 项 41.4179%。这些来自加载的 CVUSA 预训练权重，未进行本次训练更新，且基于上述含重复行的当前 CSV，不能作为正式微调结果或直接对标论文。
+- 完整 Slurm 日志：`/scratch/liuzeyu/heyinxi/logs/est-3952585.log`、`/scratch/liuzeyu/heyinxi/logs/geoloc-3952586.log`。本机副本在 `.local-cache/run-logs/20261102/`，被 Git 忽略。
+- Geoloc 内部记录目录：`/scratch/liuzeyu/heyinxi/runs/geoloc-3952586/Author CVDisaster/geolocalization/cvdisaster/convnext_base.fb_in22k_ft_in1k_384/172033/`，只有 `train.py` 配置快照和 `log.txt`，无训练 checkpoint。
+- Est 工作副本：`/scratch/liuzeyu/heyinxi/runs/est-3952585/Author CVDisaster/disaster_perception_mapping/`，没有训练权重或推理结果。
+
+本次结果查询没有修改作者代码、batch、优化器、依赖、预训练权重或重新提交任务。后续需先修正 Est 缓存映射，并确认 Geoloc 单卡显存及数据重复问题的处理方案，再进行验证和重跑。

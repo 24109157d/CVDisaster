@@ -183,3 +183,18 @@ tail -n 50 /scratch/liuzeyu/heyinxi/logs/geoloc-3780728.log
 按同一份已发布脚本、相同资源配置和源代码提交 `4785bbc03c5d604a0b00dc01e2cfdede04eae0b0` 各提交一次：Est 新 JobID `3952478`，Geoloc 新 JobID `3952479`。提交时两者均为 `PENDING (Priority)`，后续状态以 Slurm 为准，不等同于训练通过。没有重新安装依赖、修改作者模型或调整超参数。
 
 新 Geoloc 将重新完成被中断的对齐预处理；只更新作者脚本生成的派生对齐图像及划分，原始 `00_SVI`、`01_Satellite` 和预训练权重不变。运行副本和正式训练输出使用各自的新 JobID 目录，不覆盖旧任务输出。新日志为 `logs/est-3952478.log`、`logs/geoloc-3952479.log`；提交记录为 `runs/resubmit-full-20261102-est.txt`、`runs/resubmit-full-20261102-geoloc.txt`。此前父账号零 CPU 配额是之前查询时的状态；本次已观察到实际 GPU 分配，不能继续将该旧限额快照作为当前结论。
+
+## 十一、Slurm 用户环境获取失败与提交方式修正（2026-11-02）
+
+任务 `3952478`、`3952479` 随后均变为 `user_env_retrieval_failed_requeued_held`，`Restarts=1`、运行时间零，训练日志没有生成。按 [Slurm sbatch 官方说明](https://slurm.schedmd.com/sbatch.html)，`--export=ALL,变量=值` 这种显式变量列表会隐式触发 `--get-user-env`；该机制获取用户登录环境失败或超时时会重新排队并挂起。之前的提交命令使用了这种写法，应该修正；这不是 Python 模型报错的证据。登录初始化中存在 Conda hook，但此次没有取得 slurmd/slurmstepd 的管理员日志，无法断定底层失败具体来自超时、命名空间或其他节点问题。
+
+已取消这两个失败挂起的任务，在提交 shell 内显式导出代码提交号、清除该进程中的用户环境获取选项，再使用纯 `--export=ALL` 各重新提交一次。没有改动用户全局 shell 配置、作者代码、模型参数或依赖。新 Est 为 `3952585`，新 Geoloc 为 `3952586`，提交时均为 `PENDING (Priority)`，实际启动情况仍须检查。新的提交记录为 `runs/full-envfix-20261102-est.txt`、`runs/full-envfix-20261102-geoloc.txt`。
+
+```bash
+export CVDISASTER_COMMIT=4785bbc03c5d604a0b00dc01e2cfdede04eae0b0
+unset SBATCH_GET_USER_ENV SLURM_GET_USER_ENV SBATCH_EXPORT
+sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_est.sbatch
+sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatch
+```
+
+后续传递提交号采用上面的写法；不再使用逗号附加显式变量列表。Smoke 方案中的示例提交命令同步修正，未提交 smoke 作业。

@@ -59,11 +59,12 @@ batch 不设为 1，因为单对样本的对比学习没有负样本，无法有
 
 ```bash
 # 待批准后执行；COMMIT 必须填写届时已同步且包含 smoke 脚本的提交号。
-sbatch --job-name=smoke-geoloc --export=ALL,CVDISASTER_COMMIT="$COMMIT" \
+export CVDISASTER_COMMIT="$COMMIT"
+sbatch --job-name=smoke-geoloc --export=ALL \
   /scratch/liuzeyu/heyinxi/CVDisaster/slurm/smoke.sbatch geoloc
 
 # Geoloc 结果检查完成后，再单独提交：
-sbatch --job-name=smoke-est --export=ALL,CVDISASTER_COMMIT="$COMMIT" \
+sbatch --job-name=smoke-est --export=ALL \
   /scratch/liuzeyu/heyinxi/CVDisaster/slurm/smoke.sbatch est
 ```
 

@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:2
 #SBATCH --job-name=cvdisaster-geoloc
 #SBATCH --mem=60000M
 #SBATCH --time=7-00:00:00
@@ -47,8 +47,8 @@ nvidia-smi
 python - <<'PY'
 import torch
 assert torch.cuda.is_available(), 'Slurm 作业内 PyTorch 无法使用 GPU'
-assert torch.cuda.device_count() == 4, '本任务需要四张 GPU'
-for index in range(4):
+assert torch.cuda.device_count() == 2, '本任务需要两张 GPU'
+for index in range(2):
     x = torch.ones((16, 16), device=f'cuda:{index}')
     assert (x @ x).sum().item() == 4096
     print('GEOLOC_GPU_OK', torch.__version__, index, torch.cuda.get_device_name(index), flush=True)
@@ -59,6 +59,6 @@ PY
 python -u "$RUN/scripts/prepare_geoloc_data.py" \
   --data-root "$DATA" --preprocess-script "$PWD/0_prepare_splits_and_data.py"
 
-# ConvNeXt Base、subarea5、10 轮；四卡训练 batch 64 / LR 5e-4，四卡评估 batch 128。
+# ConvNeXt Base、subarea5、10 轮；两卡训练 batch 64 / LR 5e-4，两卡评估 batch 128。
 python -u 1_train_cvdisaster.py
 printf 'GEOLOC_FULL_TRAINING_COMPLETED\n'

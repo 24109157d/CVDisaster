@@ -28,9 +28,9 @@ class Configuration:
     mixed_precision: bool = True
     seed = 42
     epochs: int = 10
-    batch_size: int = 64         # 四卡共享的图片对总数，每张卡约 16 对。
+    batch_size: int = 64         # 两卡共享的图片对总数，每张卡约 32 对。
     verbose: bool = True
-    gpu_ids: tuple = (0, 1, 2, 3)   # GPU ids for training
+    gpu_ids: tuple = (0, 1)      # Slurm 分配的两张卡在进程内编号为 0、1。
     split_key: str = "subarea5"
     # Similarity Sampling
     custom_sampling: bool = True  # use custom sampling instead of random

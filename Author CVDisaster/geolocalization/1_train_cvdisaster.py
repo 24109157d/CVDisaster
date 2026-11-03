@@ -41,7 +41,6 @@ class Configuration:
     gps_dict_path: str = "./data/CVUSA/gps_dict.pkl"   # path to pre-computed distances
     # Eval
     batch_size_eval: int = 128
-    eval_single_gpu: bool = True  # 评估和难负样本特征提取只使用主卡。
     eval_every_n_epoch: int = 1        # eval every n Epoch
     normalize_features: bool = True
 
@@ -129,7 +128,7 @@ if __name__ == '__main__':
     # Data parallel
     print("GPUs available:", torch.cuda.device_count())
     print("Training global batch:", config.batch_size, "Base LR:", config.lr)
-    print("Evaluation batch:", config.batch_size_eval, "Single GPU:", config.eval_single_gpu)
+    print("Evaluation global batch:", config.batch_size_eval, "GPU ids:", config.gpu_ids)
     if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
 

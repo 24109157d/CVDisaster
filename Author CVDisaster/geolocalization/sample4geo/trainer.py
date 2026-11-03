@@ -113,10 +113,6 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
 def predict(train_config, model, dataloader):
     
     model.eval()
-    # 绕过 DataParallel，复用主卡上的模型；训练时仍使用原来的四卡包装。
-    if getattr(train_config, "eval_single_gpu", False) and isinstance(model, torch.nn.DataParallel):
-        model = model.module
-        print("Evaluation feature extraction: single GPU", train_config.device, flush=True)
     
     # wait before starting progress bar
     time.sleep(0.1)

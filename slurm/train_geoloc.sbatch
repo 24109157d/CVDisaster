@@ -59,6 +59,6 @@ PY
 python -u "$RUN/scripts/prepare_geoloc_data.py" \
   --data-root "$DATA" --preprocess-script "$PWD/0_prepare_splits_and_data.py"
 
-# ConvNeXt Base、subarea5、10 轮；四卡训练 batch 64 / LR 5e-4，单卡评估 batch 128。
+# ConvNeXt Base、subarea5、10 轮；四卡训练 batch 64 / LR 5e-4，四卡评估 batch 128。
 python -u 1_train_cvdisaster.py
 printf 'GEOLOC_FULL_TRAINING_COMPLETED\n'

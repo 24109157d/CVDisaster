@@ -60,6 +60,8 @@ parser.add_argument('--tr-ratio', type=float, required=True,
                     help='training ratio (0, 1)')
 parser.add_argument('--backbone', type=str, default='Tiny',
                     help='sum the integers (default: find the max)')
+parser.add_argument('--gpus', type=int, choices=(1, 2), default=1,
+                    help='训练 GPU 数；两卡模式使用 MirroredStrategy')
 args = parser.parse_args()
 if args.backbone == 'XXTiny' or args.backbone == 'xxtiny':
     backbone = GCViTXXTiny
@@ -74,15 +76,24 @@ elif args.backbone == 'Base' or args.backbone == 'base':
 elif args.backbone == 'Large' or args.backbone == 'large':
     backbone = GCViTLarge
 
-# env
-try:  # detect TPUs
-    tpu = tf.distribute.cluster_resolver.TPUClusterResolver.connect()  # TPU detection
-    strategy = tf.distribute.TPUStrategy(tpu)
-except ValueError:  # detect GPUss
-    tpu = None
-    strategy = (
-        tf.distribute.get_strategy()
-    )  # default strategy that works on CPU and single GPU
+# 两卡训练显式检查可见设备，禁止无声回退到单卡或 CPU。
+if args.gpus == 2:
+    gpus = tf.config.list_physical_devices('GPU')
+    if len(gpus) != 2:
+        raise RuntimeError(f'两卡训练要求恰好两张可见 GPU，实际为 {gpus}')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    strategy = tf.distribute.MirroredStrategy(devices=['/GPU:0', '/GPU:1'])
+else:
+    # env
+    try:  # detect TPUs
+        tpu = tf.distribute.cluster_resolver.TPUClusterResolver.connect()  # TPU detection
+        strategy = tf.distribute.TPUStrategy(tpu)
+    except ValueError:  # detect GPUss
+        tpu = None
+        strategy = (
+            tf.distribute.get_strategy()
+        )  # default strategy that works on CPU and single GPU
 print("Number of Accelerators: ", strategy.num_replicas_in_sync)
 
 # hyperparameters
@@ -155,16 +166,17 @@ vaData = ConfigureData(vaData)
 TOTAL_STEPS = int(trData.cardinality().numpy() * EPOCHS)
 
 # model
-lr_schedule = WarmUpCosine(
-    learning_rate_base=INIT_LR,
-    total_steps=TOTAL_STEPS,
-    warmup_learning_rate=WAMRUP_LR,
-    warmup_steps=WARMUP_STEPS,
-)
-optimizer = tf.keras.optimizers.SGD(lr_schedule)
-loss = tf.keras.losses.SparseCategoricalCrossentropy()
-
 with strategy.scope():
+    # 调度器、优化器和模型统一在分布式作用域内创建。
+    lr_schedule = WarmUpCosine(
+        learning_rate_base=INIT_LR,
+        total_steps=TOTAL_STEPS,
+        warmup_learning_rate=WAMRUP_LR,
+        warmup_steps=WARMUP_STEPS,
+    )
+    optimizer = tf.keras.optimizers.SGD(lr_schedule)
+    loss = tf.keras.losses.SparseCategoricalCrossentropy()
+
     subModelSVI = backbone(input_shape=(SVI_IMG_H, SVI_IMG_W, 3), pretrain=True, resize_query=True)
     subModelSVI.reset_classifier(num_classes=0, head_act=None)
     subModelSVI._name = 'svi'
@@ -184,7 +196,7 @@ with strategy.scope():
     output = tf.keras.layers.Dense(units=3, activation=tf.keras.activations.softmax)(output)
     model = tf.keras.Model(inputs=[inpSVI, inpSAT], outputs=[output])
 
-model.compile(loss=loss, optimizer=optimizer, metrics=["accuracy"])
+    model.compile(loss=loss, optimizer=optimizer, metrics=["accuracy"])
 # model.summary()
 
 ckpt_path = str(TR_RATIO) + '_bestCV.h5'

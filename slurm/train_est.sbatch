@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --job-name=cvdisaster-est
 #SBATCH --mem=60000M
 #SBATCH --time=7-00:00:00
@@ -45,18 +45,31 @@ nvidia-smi
 python - <<'PY'
 import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
-assert len(gpus) == 1, f'TensorFlow 应看到一张 GPU，实际为 {gpus}'
+assert len(gpus) == 2, f'TensorFlow 应看到两张 GPU，实际为 {gpus}'
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 tf.config.set_soft_device_placement(False)
-with tf.device('/GPU:0'):
-    x = tf.ones((16, 16))
-    y = tf.matmul(x, x)
-assert float(tf.reduce_sum(y).numpy()) == 4096
-print('EST_GPU_OK', tf.__version__, y.device, flush=True)
+for index in range(2):
+    with tf.device(f'/GPU:{index}'):
+        x = tf.ones((16, 16))
+        y = tf.matmul(x, x)
+    assert float(tf.reduce_sum(y).numpy()) == 4096
+    print('EST_GPU_OK', tf.__version__, y.device, flush=True)
+# 验证两卡分布式执行和结果归并，提前暴露通信故障。
+strategy = tf.distribute.MirroredStrategy(devices=['/GPU:0', '/GPU:1'])
+@tf.function
+def distributed_sum():
+    values = strategy.run(lambda: tf.constant(1.0))
+    return strategy.reduce(tf.distribute.ReduceOp.SUM, values, axis=None)
+assert strategy.num_replicas_in_sync == 2
+assert float(distributed_sum().numpy()) == 2.0
+print('EST_TWO_GPU_DISTRIBUTION_OK', flush=True)
 PY
 
+# 两卡同步训练/验证，全局 batch 不变；逐图推理沿用主卡单图方式。
 # 保留作者完整双视角实验：Tiny、训练比例 0.5、batch 12、200 轮。
 # 训练脚本末尾自动加载最佳权重并输出验证集分类指标，随后生成逐图推理结果。
-python -u 2_cv.py --tr-ratio 0.5 --backbone tiny
+python -u 2_cv.py --tr-ratio 0.5 --backbone tiny --gpus 2
 test -s 0.5_bestCV.h5
 python -u 3_estimation.py --backbone tiny
 printf 'EST_FULL_TRAINING_AND_INFERENCE_COMPLETED\n'

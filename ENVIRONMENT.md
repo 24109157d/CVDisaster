@@ -262,3 +262,9 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 全局训练 batch=64、基础学习率 `5e-4`、全局评估 batch=128 保持不变：训练每卡约 32 对图片，评估完整 batch 每卡约 64 张图片。DataParallel 仍汇总全局特征计算对比损失，GPU 数变化没有改变全局 batch，因此本次不再次缩放学习率。保留 10 轮、混合精度、8 核 CPU、60000M 内存及 7 天时限；复用已经检查通过的预处理数据，重复 ID 保持原样，不重新安装依赖。
 
 替换提交时先同步 GitHub 并验证脚本，再确认旧任务仍处于资源等待；仅取消尚未运行的旧任务后提交一次新版。若旧任务已启动，保留该运行任务并停止替换，避免重复训练。实际新 JobID、源代码提交号、日志和运行目录记录在超算 `runs/submit-geoloc-<JobID>.json` 中。两卡的实际峰值显存仍需完整训练 batch 验证。
+
+## 十七、Est 两卡同步训练（2026-11-03）
+
+用户授权 Est 申请两张 A100 并提交完整训练。`2_cv.py --gpus 2` 使用 TensorFlow MirroredStrategy；调度器、SGD 优化器、损失、模型及 compile 均在 strategy.scope 内创建。显式要求两张可见 GPU，开启显存按需分配；默认单卡/TPU 入口保留。全局 batch=12（每卡约 6 对图片）、初始学习率 0.01、warm-up 起点 0.001、200 轮、训练比例 0.5、Tiny 和原始图像尺寸不变。全局 batch 未变，不因卡数变化缩放学习率。
+
+`slurm/train_est.sbatch` 申请两卡，先逐卡执行矩阵计算，再检查分布式归并运算；训练及验证使用两卡。训练后的作者逐图指标计算沿用原代码；独立 `3_estimation.py` 仍使用默认单卡策略执行逐图推理。继续使用现有 cvdisaster_est 环境、scratch 权重和已验证的 Keras 缓存链接，不重新安装依赖或下载权重。实际两卡模型训练的显存和反向传播仍须作业启动后验证。新作业使用独立 JobID 输出目录，提交记录存入超算 runs，不修改正在运行的 Geoloc 作业。

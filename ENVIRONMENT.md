@@ -244,3 +244,13 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 用户确认不再进行小实验，已移除 `SMOKE_TEST_PLAN.md`、`scripts/smoke/` 三个 Python 文件、`slurm/smoke.sbatch`、`scripts/verify_est_cache.py`、`slurm/verify_est_cache.sbatch`，合计七个文件。历史任务、验证结论和日志路径保留，程序可从 Git 历史恢复，不再作为当前运行入口。
 
 保留 `scripts/prepare_est_cache.py`：它是正式 `slurm/train_est.sbatch` 归档和调用的缓存修复/预检查依赖，不属于可删除的临时验证程序。已有默认 Keras 缓存软链接、scratch 预训练权重、Conda 环境、作者模型及两个完整训练入口均保持不变。清理过程不运行训练、不安装依赖、不删除历史训练或验证结果。
+
+## 十五、Geoloc 四卡训练与已有数据复用（2026-11-03）
+
+按用户确认，Geoloc 调整为单节点四张 A100，训练全局 batch=64（每卡约 16 对图片）、基础学习率 `5e-4`。评估 batch=128，通过主卡上的原模型执行；初始评估、每轮评估和难负样本特征提取都使用这个单卡路径。训练仍使用 DataParallel 汇总全局特征计算损失，10 轮、混合精度、图像尺寸及现有数据划分不变。Slurm 在评估期间仍保留四张卡，不会临时释放另外三张卡。
+
+学习率 warm-up/cosine 调度改在首次自定义采样后初始化，以采样后的 DataLoader 长度计算步数。此处没有修改重复 ID、采样策略或空间划分方式。
+
+新增正式运行辅助脚本 `scripts/prepare_geoloc_data.py`，由 Geoloc sbatch 随同训练源码归档并调用。两份 subarea5 CSV 和对齐目录已存在时，检查两列路径、图片文件存在且非空、图片 ID/类别一致、训练验证 ID 无交叉，然后直接复用；重复行保留。若已有部分产物或检查失败，明确报错且不覆盖文件。仅当两份 CSV 和对齐目录均不存在时才执行作者预处理。该检查不解码全部图像，也不代表训练或四卡显存验证通过。
+
+本次仅修改并检查脚本，不提交 GPU 作业、不重新安装依赖、不覆盖原始数据、预训练权重或旧训练输出。上次 Geoloc 没有完成参数更新，新训练仍从已有 CVUSA 预训练权重开始；已完成的预处理数据可复用。

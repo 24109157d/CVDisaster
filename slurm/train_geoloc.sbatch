@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --job-name=cvdisaster-geoloc
 #SBATCH --mem=60000M
 #SBATCH --time=7-00:00:00
@@ -37,7 +37,7 @@ test -s "$DATA/02_Position/CVIAN_position.geojson"
 test -d "$DATA/00_SVI"
 test -d "$DATA/01_Satellite"
 mkdir "$RUN"
-git -C "$REPO" archive "$COMMIT" 'Author CVDisaster/geolocalization' | tar -x -C "$RUN"
+git -C "$REPO" archive "$COMMIT" 'Author CVDisaster/geolocalization' scripts/prepare_geoloc_data.py | tar -x -C "$RUN"
 cd "$RUN/Author CVDisaster/geolocalization"
 ln -s "$WEIGHTS" weights_e40_98.6830.pth
 printf 'COMMIT=%s\nRUN=%s\nDATA=%s\n' "$COMMIT" "$RUN" "$DATA"
@@ -47,20 +47,18 @@ nvidia-smi
 python - <<'PY'
 import torch
 assert torch.cuda.is_available(), 'Slurm 作业内 PyTorch 无法使用 GPU'
-assert torch.cuda.device_count() == 1, '本任务应只分配一张 GPU'
-x = torch.ones((16, 16), device='cuda')
-assert (x @ x).sum().item() == 4096
-print('GEOLOC_GPU_OK', torch.__version__, torch.cuda.get_device_name(0), flush=True)
+assert torch.cuda.device_count() == 4, '本任务需要四张 GPU'
+for index in range(4):
+    x = torch.ones((16, 16), device=f'cuda:{index}')
+    assert (x @ x).sum().item() == 4096
+    print('GEOLOC_GPU_OK', torch.__version__, index, torch.cuda.get_device_name(index), flush=True)
 PY
 
-# 本次原始数据尚未预处理，先执行作者的图像对齐和划分生成脚本。
-# 不覆盖已存在的划分，避免误用重复提交生成的新划分或覆盖其他实验输入。
-test ! -e "$DATA/train_subarea5.csv"
-test ! -e "$DATA/val_subarea5.csv"
-python -u 0_prepare_splits_and_data.py
-test -s "$DATA/train_subarea5.csv"
-test -s "$DATA/val_subarea5.csv"
+# 完整的现有数据直接复用；只有尚无预处理产物时才调用作者脚本。
+# 残缺数据报错停止，不覆盖 CSV、对齐图片，也不修改重复 ID。
+python -u "$RUN/scripts/prepare_geoloc_data.py" \
+  --data-root "$DATA" --preprocess-script "$PWD/0_prepare_splits_and_data.py"
 
-# 保留作者默认：ConvNeXt Base、subarea5、batch 128、10 轮，每轮评估。
+# ConvNeXt Base、subarea5、10 轮；四卡训练 batch 64 / LR 5e-4，单卡评估 batch 128。
 python -u 1_train_cvdisaster.py
 printf 'GEOLOC_FULL_TRAINING_COMPLETED\n'

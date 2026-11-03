@@ -28,7 +28,7 @@ class Configuration:
     mixed_precision: bool = True
     seed = 42
     epochs: int = 10
-    batch_size: int = 128        # keep in mind real_batch_size = 2 * batch_size
+    batch_size: int = 64         # 四卡共享的图片对总数，每张卡约 16 对。
     verbose: bool = True
     gpu_ids: tuple = (0, 1, 2, 3)   # GPU ids for training
     split_key: str = "subarea5"
@@ -41,6 +41,7 @@ class Configuration:
     gps_dict_path: str = "./data/CVUSA/gps_dict.pkl"   # path to pre-computed distances
     # Eval
     batch_size_eval: int = 128
+    eval_single_gpu: bool = True  # 评估和难负样本特征提取只使用主卡。
     eval_every_n_epoch: int = 1        # eval every n Epoch
     normalize_features: bool = True
 
@@ -51,7 +52,7 @@ class Configuration:
     # Loss
     label_smoothing: float = 0.1
     # Learning Rate
-    lr: float = 0.001                  # 1 * 10^-4 for ViT | 1 * 10^-1 for CNN
+    lr: float = 0.0005                 # 全局 batch 从 128 减至 64 后的基础学习率。
     scheduler: str = "cosine"          # "polynomial" | "cosine" | "constant" | None
     warmup_epochs: int = 1
     lr_end: float = 0.0001             # only for "polynomial"
@@ -127,6 +128,8 @@ if __name__ == '__main__':
 
     # Data parallel
     print("GPUs available:", torch.cuda.device_count())
+    print("Training global batch:", config.batch_size, "Base LR:", config.lr)
+    print("Evaluation batch:", config.batch_size_eval, "Single GPU:", config.eval_single_gpu)
     if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=config.gpu_ids)
 
@@ -283,37 +286,6 @@ if __name__ == '__main__':
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
 
-    # -----------------------------------------------------------------------------#
-    # Scheduler                                                                   #
-    # -----------------------------------------------------------------------------#
-
-    train_steps = len(train_dataloader) * config.epochs
-    warmup_steps = len(train_dataloader) * config.warmup_epochs
-
-    if config.scheduler == "polynomial":
-        print("\nScheduler: polynomial - max LR: {} - end LR: {}".format(config.lr, config.lr_end))
-        scheduler = get_polynomial_decay_schedule_with_warmup(optimizer,
-                                                              num_training_steps=train_steps,
-                                                              lr_end=config.lr_end,
-                                                              power=1.5,
-                                                              num_warmup_steps=warmup_steps)
-
-    elif config.scheduler == "cosine":
-        print("\nScheduler: cosine - max LR: {}".format(config.lr))
-        scheduler = get_cosine_schedule_with_warmup(optimizer,
-                                                    num_training_steps=train_steps,
-                                                    num_warmup_steps=warmup_steps)
-
-    elif config.scheduler == "constant":
-        print("\nScheduler: constant - max LR: {}".format(config.lr))
-        scheduler = get_constant_schedule_with_warmup(optimizer,
-                                                      num_warmup_steps=warmup_steps)
-
-    else:
-        scheduler = None
-
-    print("Warmup Epochs: {} - Warmup Steps: {}".format(str(config.warmup_epochs).ljust(2), warmup_steps))
-    print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
     #-----------------------------------------------------------------------------#
     # Zero Shot                                                                   #
     #-----------------------------------------------------------------------------#
@@ -345,6 +317,39 @@ if __name__ == '__main__':
         train_dataloader.dataset.shuffle(sim_dict,
                                          neighbour_select=config.neighbour_select,
                                          neighbour_range=config.neighbour_range)
+
+    # 采样器会跳过重复 ID 和不足一个 batch 的尾部，按实际 batch 数设置调度步数。
+    # -----------------------------------------------------------------------------#
+    # Scheduler                                                                   #
+    # -----------------------------------------------------------------------------#
+
+    train_steps = len(train_dataloader) * config.epochs
+    warmup_steps = len(train_dataloader) * config.warmup_epochs
+
+    if config.scheduler == "polynomial":
+        print("\nScheduler: polynomial - max LR: {} - end LR: {}".format(config.lr, config.lr_end))
+        scheduler = get_polynomial_decay_schedule_with_warmup(optimizer,
+                                                              num_training_steps=train_steps,
+                                                              lr_end=config.lr_end,
+                                                              power=1.5,
+                                                              num_warmup_steps=warmup_steps)
+
+    elif config.scheduler == "cosine":
+        print("\nScheduler: cosine - max LR: {}".format(config.lr))
+        scheduler = get_cosine_schedule_with_warmup(optimizer,
+                                                    num_training_steps=train_steps,
+                                                    num_warmup_steps=warmup_steps)
+
+    elif config.scheduler == "constant":
+        print("\nScheduler: constant - max LR: {}".format(config.lr))
+        scheduler = get_constant_schedule_with_warmup(optimizer,
+                                                      num_warmup_steps=warmup_steps)
+
+    else:
+        scheduler = None
+
+    print("Warmup Epochs: {} - Warmup Steps: {}".format(str(config.warmup_epochs).ljust(2), warmup_steps))
+    print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
 
     # -----------------------------------------------------------------------------#
     # Train                                                                       #

@@ -315,3 +315,16 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 - 单卡、batch 12、AdamW、基础 LR 0.03、weight decay 0.05、100 轮、预热起点 0.001、10 轮预热和 cosine 保持不变；不额外排除 bias 或归一化变量。每轮 206 批、预热 2060 步、总长度 20600 步。
 - 最佳权重文件为 `0.6_bestCV.h5`；训练和独立逐图推理均显式传入 `--tr-ratio 0.6`。推理入口不再硬编码 0.5 的划分和权重，避免训练后误读旧比例。
 - 本节替代第十八节 Est 的 5:5 参数；第十九节 Geo 的 6:4 设置继续生效。第一轮 SGD 5:5 与本轮 AdamW 6:4 同时改变比例及训练配置，不能解释为只更换优化器的严格消融。
+
+## 二十一、第二轮 6:4 作业已提交（2026-11-04）
+
+本地代码先推送 GitHub，超算 swarm02 工作树检查无修改后通过既有代理转发通路拉取，确认训练提交 `ad24c4969969337f380e0b63f4ce99f199c9a865`。远端 Python/Slurm 语法检查通过，已有 `train_60.csv` 为 2472 行、2472 唯一 ID，`val_60.csv` 为 1649 行、1649 唯一 ID，训练测试无交叉。Geoloc 全部图片及划分顺序核查在计算节点、正式训练前执行；Est 的 6:4 TensorFlow 划分在本次运行启动时重建并保存。没有覆盖旧划分、原图、旧模型或旧输出。
+
+Est 权重缓存预检成功，SHA256=90bf9bfaafd086a831e92edbbfbba9450fd56786c2d39b3ac3f215d0cef54768，默认 Keras 缓存与 scratch 权重指向同一文件。未升级依赖，未运行登录节点训练或 GPU 测试。
+
+| 模块 | JobID | GPU | 全局 batch | 基础 LR | 轮数 | 提交时状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Geoloc | 3971747 | 2 | 64 | 5e-5 | 10 | PENDING (Priority) |
+| Est | 3971748 | 1 | 12 | 0.03 | 100 | PENDING (Priority) |
+
+两项独立作业各提交一次，均用 `export CVDISASTER_COMMIT=ad24c4969969337f380e0b63f4ce99f199c9a865` 后 `sbatch --parsable --export=ALL slurm/train_<module>.sbatch`；未取消其他作业。对应远端记录为 `runs/submit-geoloc-3971747.json`、`runs/submit-est-3971748.json`；本机副本在 `.local-cache/job-submissions/`，不上传 GitHub。日志分别为 `/scratch/liuzeyu/heyinxi/logs/geoloc-3971747.log`、`/scratch/liuzeyu/heyinxi/logs/est-3971748.log`。提交成功不等于 GPU 训练验证通过，实际显存、反向传播、单卡 AdamW 和最终指标需待作业运行后核查。

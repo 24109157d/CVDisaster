@@ -130,7 +130,7 @@ split_manifest = {}
 for split_name, split_data in [('train', trData), ('test', vaData)]:
     split_paths = [os.path.relpath(os.fsdecode(path), str(dirSVI))
                    for path in split_data.as_numpy_iterator()]
-    split_file = pathlib.Path(f'est_{split_name}_50.csv')
+    split_file = pathlib.Path(f'est_{split_name}_{round(TR_RATIO * 100)}.csv')
     with split_file.open('w', encoding='utf-8', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(['svi_relative_path', 'label'])

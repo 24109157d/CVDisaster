@@ -306,3 +306,12 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 - Geoloc 训练与独立复评统一改为 `val60`，检查 `train_60.csv`、`val_60.csv`。按作者排序配对后 `train_test_split(train_size=0.6, random_state=42)`，4121 对分为 2472 对训练、1649 对测试，不分层。
 - 两卡、全局 batch 64、学习率 5e-5、AdamW、10 轮、1 轮预热及其余训练设置不变。调度仍在首次自定义采样之前计算：每轮初始 DataLoader 为 39 批，预热 39 步、总长度 390 步。
 - 划分检查器核对 6:4 的样本及行顺序、唯一 ID 和无交叉，保留已有数据，不重新对齐图片或覆盖旧实验。
+
+## 二十、Est 同步改为 6:4 后提交（2026-11-04）
+
+用户随后确认 Est 也使用新版表 7 的 6:4。其 OA=71.38%、macro R=71.73% 是表中最高；macro P=73.13% 低于 5:5 的 73.83%，F1=0.73 与 5:5 相同。因此以 OA/Recall 为选择依据，不称所有指标均最优。
+
+- 保留作者 TensorFlow shuffle(seed=626, reshuffle_each_iteration=False)，训练 2472 对、测试 1649 对；清单文件为 `est_train_60.csv`、`est_test_60.csv`。Geo 与 Est 比例相同，但算法和种子独立，样本清单不共用。
+- 单卡、batch 12、AdamW、基础 LR 0.03、weight decay 0.05、100 轮、预热起点 0.001、10 轮预热和 cosine 保持不变；不额外排除 bias 或归一化变量。每轮 206 批、预热 2060 步、总长度 20600 步。
+- 最佳权重文件为 `0.6_bestCV.h5`；训练和独立逐图推理均显式传入 `--tr-ratio 0.6`。推理入口不再硬编码 0.5 的划分和权重，避免训练后误读旧比例。
+- 本节替代第十八节 Est 的 5:5 参数；第十九节 Geo 的 6:4 设置继续生效。第一轮 SGD 5:5 与本轮 AdamW 6:4 同时改变比例及训练配置，不能解释为只更换优化器的严格消融。

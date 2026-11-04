@@ -60,10 +60,10 @@ assert tf.keras.optimizers.experimental.AdamW is not None
 print('EST_SINGLE_GPU_ADAMW_API_OK', flush=True)
 PY
 
-# 新版论文对比实验：单卡 Tiny、5:5、batch 12、AdamW、LR 0.03、WD 0.05。
+# 新版论文对比实验：单卡 Tiny、6:4、batch 12、AdamW、LR 0.03、WD 0.05。
 # 训练 100 轮、预热 10 轮；目录由 JobID 隔离，不覆盖第一轮 SGD 结果。
 # 正式分类报告基于完整测试集，estimation.txt 仅用于作者原有逐图展示。
-python -u 2_cv.py --tr-ratio 0.5 --backbone tiny --gpus 1
-test -s 0.5_bestCV.h5
-python -u 3_estimation.py --backbone tiny
+python -u 2_cv.py --tr-ratio 0.6 --backbone tiny --gpus 1
+test -s 0.6_bestCV.h5
+python -u 3_estimation.py --tr-ratio 0.6 --backbone tiny
 printf 'EST_FULL_TRAINING_AND_INFERENCE_COMPLETED\n'

@@ -13,6 +13,8 @@ tf.config.run_functions_eagerly(True)
 parser = argparse.ArgumentParser(description='cross view options')
 parser.add_argument('--backbone', type=str, default='Tiny',
                     help='sum the integers (default: find the max)')
+parser.add_argument('--tr-ratio', type=float, required=True,
+                    help='与训练一致的比例，用于重建测试集和选择对应 checkpoint')
 args = parser.parse_args()
 if args.backbone == 'XXTiny' or args.backbone == 'xxtiny':
     backbone = GCViTXXTiny
@@ -60,7 +62,8 @@ dirImgSVI = tf.data.Dataset.list_files(str(dirSVI/'*/*.png'), shuffle=False)
 dirImgSVI = dirImgSVI.shuffle(imgCount, reshuffle_each_iteration=False, seed=SEED)
 className = np.array(sorted([item.name for item in dirSVI.glob('*')]))
 
-trSize = int(imgCount * 0.5)
+# 必须与训练入口使用相同比例及 seed=626，禁止继续硬编码旧实验的 5:5。
+trSize = int(imgCount * args.tr_ratio)
 trData = dirImgSVI.take(trSize)
 vaData = dirImgSVI.skip(trSize)
 
@@ -84,7 +87,7 @@ with strategy.scope():
     output = tf.keras.layers.Dense(units=3, activation=tf.keras.activations.softmax)(output)
     model = tf.keras.Model(inputs=[inpSVI, inpSAT], outputs=[output])
 
-ckpt_path = '0.5_bestCV.h5'
+ckpt_path = str(args.tr_ratio) + '_bestCV.h5'
 model.load_weights(ckpt_path)
 
 with open('estimation.txt', 'w') as f:

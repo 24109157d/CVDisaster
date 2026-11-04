@@ -31,7 +31,7 @@ class Configuration:
     batch_size: int = 64         # 两卡共享的图片对总数，每张卡约 32 对。
     verbose: bool = True
     gpu_ids: tuple = (0, 1)      # Slurm 分配的两张卡在进程内编号为 0、1。
-    split_key: str = "val50"  # 随机 5:5，与论文表 3 对齐。
+    split_key: str = "val60"  # 随机 6:4，与论文表 3 对齐。
     # Similarity Sampling
     custom_sampling: bool = True  # use custom sampling instead of random
     gps_sample: bool = False        # use gps sampling
@@ -286,7 +286,7 @@ if __name__ == '__main__':
         optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
 
     # 严格沿用作者计算位置：首次自定义采样之前计算步数，不按采样后长度重算。
-    # 5:5 的 2060 对、batch 64 对应 ceil(2060/64)=33，预热 33 步、总计 330 步。
+    # 6:4 的 2472 对、batch 64 对应 ceil(2472/64)=39，预热 39 步、总计 390 步。
     # -----------------------------------------------------------------------------#
     # Scheduler                                                                   #
     # -----------------------------------------------------------------------------#

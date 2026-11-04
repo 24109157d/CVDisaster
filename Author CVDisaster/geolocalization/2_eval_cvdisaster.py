@@ -21,7 +21,7 @@ class Configuration:
     verbose: bool = True
     gpu_ids: tuple = (0, 1)
     normalize_features: bool = True
-    split_key: str = "val50"  # 与本轮训练共用随机 5:5 测试集及候选库。
+    split_key: str = "val60"  # 与本轮训练共用随机 6:4 测试集及候选库。
     # Dataset
     data_folder = "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN"
     # Checkpoint to start from
@@ -42,7 +42,7 @@ config = Configuration()
 if __name__ == '__main__':
 
     # 独立复评必须明确输入 checkpoint；训练脚本末尾也会自动复评本轮最佳权重。
-    parser = argparse.ArgumentParser(description='随机 5:5 Geo 最佳权重复评')
+    parser = argparse.ArgumentParser(description='随机 6:4 Geo 最佳权重复评')
     parser.add_argument('--checkpoint', required=True, help='本轮最佳 .pth 权重路径')
     args = parser.parse_args()
     config.checkpoint_start = args.checkpoint

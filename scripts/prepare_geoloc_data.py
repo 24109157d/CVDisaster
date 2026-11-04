@@ -11,7 +11,7 @@ import sys
 
 
 def validate_splits(data_root):
-    """核对随机 5:5 的实际文件、唯一 ID、划分算法和顺序，不自动修复任何差异。"""
+    """核对随机 6:4 的实际文件、唯一 ID、划分算法和顺序，不自动修复任何差异。"""
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
@@ -25,11 +25,11 @@ def validate_splits(data_root):
         raise ValueError('新版论文要求街景、卫星各 4121 张，请检查预处理数据完整性')
     expected = train_test_split(
         pd.DataFrame(list(zip(sat_files, svi_files)), columns=['sat', 'ground']),
-        train_size=0.5, random_state=42)
+        train_size=0.6, random_state=42)
     split_ids = []
-    manifest = {'protocol': '2025-paper-geoloc-random-50', 'random_state': 42,
-                'train_size': 0.5, 'splits': {}}
-    for name, expected_frame in zip(("train_50.csv", "val_50.csv"), expected):
+    manifest = {'protocol': '2025-paper-geoloc-random-60', 'random_state': 42,
+                'train_size': 0.6, 'splits': {}}
+    for name, expected_frame in zip(("train_60.csv", "val_60.csv"), expected):
         rows = 0
         ids = set()
         actual_pairs = []
@@ -75,7 +75,7 @@ def validate_splits(data_root):
 def prepare(data_root, preprocess_script):
     data_root = Path(data_root).resolve()
     artifacts = [data_root / name for name in
-                 ("train_50.csv", "val_50.csv", "00_SVI_aligned")]
+                 ("train_60.csv", "val_60.csv", "00_SVI_aligned")]
     if not data_root.is_dir():
         raise ValueError(f"数据目录不存在: {data_root}")
     if not any(path.exists() for path in artifacts):

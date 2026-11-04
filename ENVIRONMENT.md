@@ -268,3 +268,33 @@ sbatch --export=ALL /scratch/liuzeyu/heyinxi/CVDisaster/slurm/train_geoloc.sbatc
 用户授权 Est 申请两张 A100 并提交完整训练。`2_cv.py --gpus 2` 使用 TensorFlow MirroredStrategy；调度器、SGD 优化器、损失、模型及 compile 均在 strategy.scope 内创建。显式要求两张可见 GPU，开启显存按需分配；默认单卡/TPU 入口保留。全局 batch=12（每卡约 6 对图片）、初始学习率 0.01、warm-up 起点 0.001、200 轮、训练比例 0.5、Tiny 和原始图像尺寸不变。全局 batch 未变，不因卡数变化缩放学习率。
 
 `slurm/train_est.sbatch` 申请两卡，先逐卡执行矩阵计算，再检查分布式归并运算；训练及验证使用两卡。训练后的作者逐图指标计算沿用原代码；独立 `3_estimation.py` 仍使用默认单卡策略执行逐图推理。继续使用现有 cvdisaster_est 环境、scratch 权重和已验证的 Keras 缓存链接，不重新安装依赖或下载权重。实际两卡模型训练的显存和反向传播仍须作业启动后验证。新作业使用独立 JobID 输出目录，提交记录存入超算 runs，不修改正在运行的 Geoloc 作业。
+
+## 十八、按 2025 正式论文配置第二轮代码（2026-11-04）
+
+本节为当前训练入口配置；前文保留历史运行记录。用户已确认本轮修改代码，暂不提交训练作业。依据 `参考论文/2_CVDisaster.pdf` 第 4 节（ISPRS 220，841–854），明确参数以正式论文为准，缺失的实现细节参考作者 GitHub；两任务独立训练、各自划分、各自保存结果。
+
+### 第一轮结果与正确对标
+
+- Geoloc JobID `3956583`：subarea5 空间留出，3854 个训练唯一对、267 个测试唯一对（CSV 分别 3977/268 行）；第 8 轮最佳 R@1/5/10/1% 为 81.7164/95.5224/96.6418/89.5522%。对应新版表 4 Subarea_5 的 80.69/95.15/96.27/89.18%，不能与表 3 的随机比例实验混比。
+- Est JobID `3956738`：SGD、两卡、batch 12、200 轮；第 119 轮最佳权重在完整 2061 对上的 OA=70.5000%、macro P=73.0122%、macro R=70.6382%、macro F1=0.71388。对应新版表 6/7 的 5:5，OA=71.18%、P=73.83%、R=71.22%，论文整体 F1=0.73 的汇总定义未明确。
+
+### 第二轮 Geoloc
+
+- 切换为随机 5:5：`split_key=val50`，4121 对按作者排序、配对后 `train_test_split(train_size=0.5, random_state=42)`，预期 2060 对训练、2061 对测试，不分层。
+- 两张 GPU、DataParallel、全局训练 batch=64、评估 batch=128。学习率以论文 `1e-4` 随 batch 128→64 减半为 `5e-5`；AdamW、默认 weight decay=0.01、10 轮、1 轮 warm-up 和 cosine 保留。
+- 恢复作者在首次自定义采样之前计算步数的位置：2060 对/batch 64 的 DataLoader 为 33 批，预热 33 步、调度总长度 330 步。自定义采样可能舍弃尾部；不再用采样后长度重算调度。
+- 模型、CVUSA 权重、朝北对齐、裁剪、缩放、增强、InfoNCE、label smoothing=0.1、混合精度及难负采样沿用作者实现。论文原图尺寸与代码网络输入尺寸分别记录，不额外更改处理链。
+- `prepare_geoloc_data.py` 检查实际 CSV 与作者算法的样本及顺序逐项相同、ID 唯一、无训练测试交叉，并在当前 JobID 目录保存两份 CSV 快照及 `geoloc_split_manifest.json`。现有数据残缺直接报错，不覆盖已有划分或历史产物。
+- 每轮按测试 R@1 选最佳权重，结束后重新加载最佳权重复评整组指标；独立入口为 `python 2_eval_cvdisaster.py --checkpoint <本轮最佳权重>`，固定同一 val50 测试集，不默认使用初始 CVUSA 权重。
+- 对标新版表 3 的 5:5：R@1/5/10/1%=74.48/95.58/98.35/99.37%。
+
+### 第二轮 Est：论文 AdamW 配置对比
+
+- 单张 GPU，OneDeviceStrategy；保持作者 batch=12、Tiny 双分支、原始街景 512×1024 与卫星 512×512。保持独立 TensorFlow shuffle(seed=626, reshuffle_each_iteration=False) 后 take/skip，2060 对训练、2061 对测试，不使用 Geoloc CSV。
+- 使用现有 Keras 2.10 的 `tf.keras.optimizers.experimental.AdamW`，基础学习率 0.03、weight decay=0.05、100 轮。关闭优化器默认 XLA（jit_compile=False），不升级依赖；其权重衰减按 `lr * weight_decay * variable` 更新。
+- cosine 调度保留作者公式；预热改为 10 轮，起点沿用公开代码 0.001。每轮 172 批、预热 1720 步、总长度 17200 步。论文及 Est 公开代码未提供 AdamW 排除规则，本轮不额外排除 bias/归一化变量；其余 AdamW 参数采用现有 Keras 默认值。
+- 新运行目录保存 `est_train_50.csv`、`est_test_50.csv`、清单哈希及 `est_config.json`。最佳权重仍按最高 val_accuracy 保存；加载后输出完整测试集的 `est_metrics.json`（含 macro/weighted F1、最佳轮次）和关联路径的 `est_predictions.csv`。
+- 原 `estimation.txt` 仅保留为逐图展示，它会按原图尺寸过滤样本，不作为完整测试集指标依据。
+- 本轮同时更换优化器、学习率、衰减、轮数及 warm-up，并改为单卡；这是论文整套配置与第一轮 SGD 配置的对比，不能将成绩变化全部归因于优化器。
+
+两任务都沿用作者公开代码的训练/测试两部分流程：测试集同时用于选择最佳 checkpoint 和最终报告，没有额外独立验证集。旧 JobID 目录、CSV、模型及结果保留；新版 sbatch 仍用新 JobID 目录隔离运行。

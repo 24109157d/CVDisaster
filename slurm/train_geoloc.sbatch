@@ -59,6 +59,7 @@ PY
 python -u "$RUN/scripts/prepare_geoloc_data.py" \
   --data-root "$DATA" --preprocess-script "$PWD/0_prepare_splits_and_data.py"
 
-# ConvNeXt Base、subarea5、10 轮；两卡训练 batch 64 / LR 5e-4，两卡评估 batch 128。
+# 新版论文表 3 随机 5:5：两卡、全局 batch 64、LR 5e-5、10 轮。
+# 训练末尾自动加载测试集 R@1 最佳权重，输出该权重对应的完整 Recall 指标。
 python -u 1_train_cvdisaster.py
 printf 'GEOLOC_FULL_TRAINING_COMPLETED\n'

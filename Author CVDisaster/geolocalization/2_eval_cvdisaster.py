@@ -1,4 +1,5 @@
 import os
+import argparse
 import torch
 from dataclasses import dataclass
 
@@ -18,13 +19,13 @@ class Configuration:
     # Evaluation
     batch_size: int = 128
     verbose: bool = True
-    gpu_ids: tuple = (0,)
+    gpu_ids: tuple = (0, 1)
     normalize_features: bool = True
-    split_key: int = "val100"
+    split_key: str = "val50"  # 与本轮训练共用随机 5:5 测试集及候选库。
     # Dataset
     data_folder = "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN"
     # Checkpoint to start from
-    checkpoint_start = "weights_e40_98.6830.pth"
+    checkpoint_start = None  # 必须从命令行指定本轮最佳权重，禁止默认评估初始 CVUSA 权重。
     # set num_workers to 0 if on Windows
     num_workers: int = 0 if os.name == 'nt' else 4
     # train on GPU if available
@@ -39,6 +40,12 @@ config = Configuration()
 
 
 if __name__ == '__main__':
+
+    # 独立复评必须明确输入 checkpoint；训练脚本末尾也会自动复评本轮最佳权重。
+    parser = argparse.ArgumentParser(description='随机 5:5 Geo 最佳权重复评')
+    parser.add_argument('--checkpoint', required=True, help='本轮最佳 .pth 权重路径')
+    args = parser.parse_args()
+    config.checkpoint_start = args.checkpoint
 
     # -----------------------------------------------------------------------------#
     #  Model                                                                       #

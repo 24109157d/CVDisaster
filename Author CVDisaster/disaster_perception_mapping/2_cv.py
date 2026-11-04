@@ -1,4 +1,7 @@
 import argparse
+import csv
+import hashlib
+import json
 import numpy as np
 import os
 import pathlib
@@ -60,8 +63,8 @@ parser.add_argument('--tr-ratio', type=float, required=True,
                     help='training ratio (0, 1)')
 parser.add_argument('--backbone', type=str, default='Tiny',
                     help='sum the integers (default: find the max)')
-parser.add_argument('--gpus', type=int, choices=(1, 2), default=1,
-                    help='训练 GPU 数；两卡模式使用 MirroredStrategy')
+parser.add_argument('--gpus', type=int, choices=(1,), default=1,
+                    help='本轮论文配置固定使用一张 GPU')
 args = parser.parse_args()
 if args.backbone == 'XXTiny' or args.backbone == 'xxtiny':
     backbone = GCViTXXTiny
@@ -76,24 +79,13 @@ elif args.backbone == 'Base' or args.backbone == 'base':
 elif args.backbone == 'Large' or args.backbone == 'large':
     backbone = GCViTLarge
 
-# 两卡训练显式检查可见设备，禁止无声回退到单卡或 CPU。
-if args.gpus == 2:
-    gpus = tf.config.list_physical_devices('GPU')
-    if len(gpus) != 2:
-        raise RuntimeError(f'两卡训练要求恰好两张可见 GPU，实际为 {gpus}')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-    strategy = tf.distribute.MirroredStrategy(devices=['/GPU:0', '/GPU:1'])
-else:
-    # env
-    try:  # detect TPUs
-        tpu = tf.distribute.cluster_resolver.TPUClusterResolver.connect()  # TPU detection
-        strategy = tf.distribute.TPUStrategy(tpu)
-    except ValueError:  # detect GPUss
-        tpu = None
-        strategy = (
-            tf.distribute.get_strategy()
-        )  # default strategy that works on CPU and single GPU
+# 本轮明确使用单卡；设备不符合要求直接报错，不自动改用 CPU 或 TPU。
+gpus = tf.config.list_physical_devices('GPU')
+if len(gpus) != 1:
+    raise RuntimeError(f'Est 本轮要求恰好一张可见 GPU，实际为 {gpus}')
+tf.config.experimental.set_memory_growth(gpus[0], True)
+tf.config.set_soft_device_placement(False)
+strategy = tf.distribute.OneDeviceStrategy(device='/GPU:0')
 print("Number of Accelerators: ", strategy.num_replicas_in_sync)
 
 # hyperparameters
@@ -107,10 +99,13 @@ SAT_IMG_H = 512
 SAT_IMG_W = 512
 SAT_IMAGE_SIZE = [SAT_IMG_H, SAT_IMG_W]
 SEED = 626
-EPOCHS = 200
-WARMUP_STEPS = 10
-INIT_LR = 0.01
+# 新版论文明确规定 AdamW、100 轮、基础学习率 0.03、衰减 0.05 和 10 轮预热。
+# 论文未规定预热起点，沿用作者 GitHub 的 0.001，不增加额外参数衰减排除规则。
+EPOCHS = 100
+WARMUP_EPOCHS = 10
+INIT_LR = 0.03
 WAMRUP_LR = 0.001
+WEIGHT_DECAY = 0.05
 
 # build dataset
 dirSVI = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI')
@@ -128,6 +123,24 @@ className = np.array(sorted([item.name for item in dirSVI.glob('*')]))
 trSize = int(imgCount * TR_RATIO)
 trData = dirImgSVI.take(trSize)
 vaData = dirImgSVI.skip(trSize)
+
+# 在读取图像前固化本次实际划分，使用相对路径以便与旧实验逐样本比较。
+# 不改变作者的 shuffle 种子、输入排序或 take/skip 算法，也不额外设置全局随机种子。
+split_manifest = {}
+for split_name, split_data in [('train', trData), ('test', vaData)]:
+    split_paths = [os.path.relpath(os.fsdecode(path), str(dirSVI))
+                   for path in split_data.as_numpy_iterator()]
+    split_file = pathlib.Path(f'est_{split_name}_50.csv')
+    with split_file.open('w', encoding='utf-8', newline='') as handle:
+        writer = csv.writer(handle)
+        writer.writerow(['svi_relative_path', 'label'])
+        writer.writerows((path, pathlib.Path(path).parent.name) for path in split_paths)
+    split_manifest[split_name] = {
+        'count': len(split_paths), 'file': str(split_file),
+        'sha256': hashlib.sha256(split_file.read_bytes()).hexdigest(),
+    }
+    if split_name == 'test':
+        test_paths = split_paths  # 与 vaData 顺序一致，用于最终逐样本预测的路径关联。
 
 def GetLabel(file_path):
     # Convert the path to a list of path components
@@ -163,18 +176,35 @@ trData = trData.map(ProcessPath, num_parallel_calls=tf.data.AUTOTUNE)
 vaData = vaData.map(ProcessPath, num_parallel_calls=tf.data.AUTOTUNE)
 trData = ConfigureData(trData)
 vaData = ConfigureData(vaData)
-TOTAL_STEPS = int(trData.cardinality().numpy() * EPOCHS)
+# batch() 保留最后一个不完整 batch，必须用实际 cardinality 换算轮数和优化步数。
+STEPS_PER_EPOCH = int(trData.cardinality().numpy())
+TOTAL_STEPS = STEPS_PER_EPOCH * EPOCHS
+WARMUP_STEPS = STEPS_PER_EPOCH * WARMUP_EPOCHS
+run_config = {
+    'protocol': '2025-paper-est-adamw', 'backbone': args.backbone,
+    'train_ratio': TR_RATIO, 'split_seed': SEED, 'gpus': args.gpus,
+    'batch_size': BATCH_SIZE, 'epochs': EPOCHS, 'optimizer': 'AdamW',
+    'base_lr': INIT_LR, 'warmup_lr': WAMRUP_LR, 'weight_decay': WEIGHT_DECAY,
+    'warmup_epochs': WARMUP_EPOCHS, 'steps_per_epoch': STEPS_PER_EPOCH,
+    'warmup_steps': WARMUP_STEPS, 'total_steps': TOTAL_STEPS,
+    'weight_decay_exclusions': [], 'splits': split_manifest,
+}
+pathlib.Path('est_config.json').write_text(
+    json.dumps(run_config, ensure_ascii=False, indent=2), encoding='utf-8')
+print('EST_CONFIG', json.dumps(run_config, ensure_ascii=False), flush=True)
 
 # model
 with strategy.scope():
-    # 调度器、优化器和模型统一在分布式作用域内创建。
+    # 单卡作用域内构建模型及优化器。使用现有 TensorFlow/Keras 2.10 自带 AdamW，
+    # 其衰减更新为 lr * weight_decay * variable；关闭默认 XLA，沿用原训练执行方式。
     lr_schedule = WarmUpCosine(
         learning_rate_base=INIT_LR,
         total_steps=TOTAL_STEPS,
         warmup_learning_rate=WAMRUP_LR,
         warmup_steps=WARMUP_STEPS,
     )
-    optimizer = tf.keras.optimizers.SGD(lr_schedule)
+    optimizer = tf.keras.optimizers.experimental.AdamW(
+        learning_rate=lr_schedule, weight_decay=WEIGHT_DECAY, jit_compile=False)
     loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
     subModelSVI = backbone(input_shape=(SVI_IMG_H, SVI_IMG_W, 3), pretrain=True, resize_query=True)
@@ -222,3 +252,18 @@ print(classification_report(yTrue, yPred, target_names=['minor', 'moderate', 'se
 overallP = precision_score(yTrue, yPred, average='macro')
 overallR = recall_score(yTrue, yPred, average='macro')
 print('Overall Precision:', overallP, '\nOverall Recall:', overallR)
+
+# 分类报告以完整测试集为准；保存逐样本预测及全部汇总，保留 macro/weighted F1 的区别。
+# 独立展示脚本可能因原图尺寸跳过样本，不能用其 estimation.txt 替代这里的结果。
+report = classification_report(
+    yTrue, yPred, target_names=['minor', 'moderate', 'severe'], output_dict=True)
+if len(test_paths) != len(yTrue) or len(yTrue) != len(yPred):
+    raise ValueError('测试清单、真实标签及预测数量不一致，拒绝输出截断的逐图结果')
+report['best_epoch'] = int(np.argmax(history.history['val_accuracy'])) + 1
+report['checkpoint'] = ckpt_path
+pathlib.Path('est_metrics.json').write_text(
+    json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+with pathlib.Path('est_predictions.csv').open('w', encoding='utf-8', newline='') as handle:
+    writer = csv.writer(handle)
+    writer.writerow(['svi_relative_path', 'true_label', 'predicted_label'])
+    writer.writerows(zip(test_paths, yTrue.tolist(), yPred.tolist()))

@@ -31,7 +31,7 @@ class Configuration:
     batch_size: int = 64         # 两卡共享的图片对总数，每张卡约 32 对。
     verbose: bool = True
     gpu_ids: tuple = (0, 1)      # Slurm 分配的两张卡在进程内编号为 0、1。
-    split_key: str = "subarea5"
+    split_key: str = "val50"  # 随机 5:5，与论文表 3 对齐。
     # Similarity Sampling
     custom_sampling: bool = True  # use custom sampling instead of random
     gps_sample: bool = False        # use gps sampling
@@ -51,7 +51,7 @@ class Configuration:
     # Loss
     label_smoothing: float = 0.1
     # Learning Rate
-    lr: float = 0.0005                 # 全局 batch 从 128 减至 64 后的基础学习率。
+    lr: float = 0.00005                # 新版论文基础学习率 1e-4 随 batch 128→64 减半。
     scheduler: str = "cosine"          # "polynomial" | "cosine" | "constant" | None
     warmup_epochs: int = 1
     lr_end: float = 0.0001             # only for "polynomial"
@@ -73,7 +73,7 @@ class Configuration:
     # make cudnn deterministic
     cudnn_deterministic: bool = False
     # Eval before training
-    zero_shot: bool = True 
+    zero_shot: bool = True
 
 # -----------------------------------------------------------------------------#
 #  Train Config                                                                #
@@ -285,39 +285,8 @@ if __name__ == '__main__':
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
 
-    #-----------------------------------------------------------------------------#
-    # Zero Shot                                                                   #
-    #-----------------------------------------------------------------------------#
-    if config.zero_shot:
-        print("\n{}[{}]{}".format(30*"-", "Zero Shot", 30*"-"))  
-
-      
-        r1_test = evaluate(config=config,
-                           model=model,
-                           reference_dataloader=reference_dataloader_test,
-                           query_dataloader=query_dataloader_test, 
-                           ranks=[1, 5, 10],
-                           step_size=1000,
-                           cleanup=True)
-        
-        if config.sim_sample:
-            r1_train, sim_dict = calc_sim(config=config,
-                                          model=model,
-                                          reference_dataloader=reference_dataloader_train,
-                                          query_dataloader=query_dataloader_train, 
-                                          ranks=[1, 5, 10],
-                                          step_size=1000,
-                                          cleanup=True)
-                
-    # -----------------------------------------------------------------------------#
-    # Shuffle                                                                     #
-    # -----------------------------------------------------------------------------#
-    if config.custom_sampling:
-        train_dataloader.dataset.shuffle(sim_dict,
-                                         neighbour_select=config.neighbour_select,
-                                         neighbour_range=config.neighbour_range)
-
-    # 采样器会跳过重复 ID 和不足一个 batch 的尾部，按实际 batch 数设置调度步数。
+    # 严格沿用作者计算位置：首次自定义采样之前计算步数，不按采样后长度重算。
+    # 5:5 的 2060 对、batch 64 对应 ceil(2060/64)=33，预热 33 步、总计 330 步。
     # -----------------------------------------------------------------------------#
     # Scheduler                                                                   #
     # -----------------------------------------------------------------------------#
@@ -350,11 +319,44 @@ if __name__ == '__main__':
     print("Warmup Epochs: {} - Warmup Steps: {}".format(str(config.warmup_epochs).ljust(2), warmup_steps))
     print("Train Epochs:  {} - Train Steps:  {}".format(config.epochs, train_steps))
 
+    #-----------------------------------------------------------------------------#
+    # Zero Shot                                                                   #
+    #-----------------------------------------------------------------------------#
+    if config.zero_shot:
+        print("\n{}[{}]{}".format(30*"-", "Zero Shot", 30*"-"))
+
+
+        r1_test = evaluate(config=config,
+                           model=model,
+                           reference_dataloader=reference_dataloader_test,
+                           query_dataloader=query_dataloader_test,
+                           ranks=[1, 5, 10],
+                           step_size=1000,
+                           cleanup=True)
+
+        if config.sim_sample:
+            r1_train, sim_dict = calc_sim(config=config,
+                                          model=model,
+                                          reference_dataloader=reference_dataloader_train,
+                                          query_dataloader=query_dataloader_train,
+                                          ranks=[1, 5, 10],
+                                          step_size=1000,
+                                          cleanup=True)
+
+    # -----------------------------------------------------------------------------#
+    # Shuffle                                                                     #
+    # -----------------------------------------------------------------------------#
+    if config.custom_sampling:
+        train_dataloader.dataset.shuffle(sim_dict,
+                                         neighbour_select=config.neighbour_select,
+                                         neighbour_range=config.neighbour_range)
+
     # -----------------------------------------------------------------------------#
     # Train                                                                       #
     # -----------------------------------------------------------------------------#
     start_epoch = 0
     best_score = 0
+    best_checkpoint = None  # 明确记录按测试集 R@1 选出的权重，末尾重新加载核验。
 
     for epoch in range(1, config.epochs + 1):
 
@@ -397,6 +399,7 @@ if __name__ == '__main__':
             if r1_test > best_score:
 
                 best_score = r1_test
+                best_checkpoint = '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test)
 
                 if torch.cuda.device_count() > 1 and len(config.gpu_ids) > 1:
                     torch.save(model.module.state_dict(), '{}/weights_e{}_{:.4f}.pth'.format(model_path, epoch, r1_test))
@@ -412,3 +415,18 @@ if __name__ == '__main__':
         torch.save(model.module.state_dict(), '{}/weights_end.pth'.format(model_path))
     else:
         torch.save(model.state_dict(), '{}/weights_end.pth'.format(model_path))
+
+    # 最终报告使用测试集 R@1 最佳轮次的整组指标，不能混合不同轮次的峰值。
+    # 无最佳权重时明确报错，避免用初始权重或最终轮次无声替代。
+    if best_checkpoint is None:
+        raise RuntimeError("训练未产生 R@1 大于 0 的最佳 checkpoint，请检查训练日志")
+    best_state = torch.load(best_checkpoint, map_location='cpu')
+    if isinstance(model, torch.nn.DataParallel):
+        model.module.load_state_dict(best_state)
+    else:
+        model.load_state_dict(best_state)
+    print("GEOLOC_BEST_CHECKPOINT", best_checkpoint, flush=True)
+    evaluate(config=config, model=model,
+             reference_dataloader=reference_dataloader_test,
+             query_dataloader=query_dataloader_test, ranks=[1, 5, 10],
+             step_size=1000, cleanup=True)

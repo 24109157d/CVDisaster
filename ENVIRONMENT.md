@@ -352,3 +352,9 @@ Geo 两轮对比：第一轮 `3956583` 为 subarea5，训练3854唯一对、测�
 本次唯一训练参数变更：Geo 基础学习率从5e-5恢复为5e-4。6:4、train_test_split(train_size=0.6, random_state=42)、两卡、全局batch64、10轮、1轮预热、cosine、优化器、损失和其他设置保持不变，Est不改。5e-4对应作者GitHub基础LR=1e-3随batch减半，高于论文正文1e-4的5倍；应标为固定第二轮配置下的学习率对照，不能称为与论文完全相同。
 
 Python AST检查确认训练入口只有lr常量发生变化，Slurm同步更新说明文字。本轮仅改代码并推送GitHub，不提交新Geo作业，既有运行目录与结果保留。
+
+## 二十五、Geo 学习率对照已提交（2026-11-05）
+
+超算拉取并确认训练提交 `8ca60d598d2c306930b1b61d80c098ece846efeb`，语法和参数检查通过；train_60.csv/val_60.csv 的SHA256与上一轮 `3971747` 的运行清单完全一致，2472对训练、1649对测试。仅将Geo学习率改为5e-4，其余6:4、种子42、两卡、全局batch64、10轮、39步预热和390步调度长度保持不变。
+
+新Geo任务JobID `3979539`，提交时PENDING；远端记录 `runs/submit-geoloc-3979539.json`，日志 `/scratch/liuzeyu/heyinxi/logs/geoloc-3979539.log`，本机记录 `.local-cache/job-submissions/geoloc-3979539.json`。各训练产物由新JobID隔离，不覆盖 `3971747`；仍从相同CVUSA预训练权重初始化。Est `3979438` 在g0141运行，未重复提交或修改。

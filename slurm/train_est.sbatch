@@ -8,7 +8,7 @@
 #SBATCH --gres=gpu:2
 #SBATCH --job-name=cvdisaster-est
 #SBATCH --mem=60000M
-#SBATCH --time=7-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --output=/scratch/liuzeyu/heyinxi/logs/est-%j.log
 
 # 不加载案例中的 CUDA 12.2；使用已验证的 Est 环境内 CUDA 11.2/cuDNN 8.1。

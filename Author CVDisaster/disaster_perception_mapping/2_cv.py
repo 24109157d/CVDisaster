@@ -63,8 +63,8 @@ parser.add_argument('--tr-ratio', type=float, required=True,
                     help='training ratio (0, 1)')
 parser.add_argument('--backbone', type=str, default='Tiny',
                     help='sum the integers (default: find the max)')
-parser.add_argument('--gpus', type=int, choices=(1,), default=1,
-                    help='本轮论文配置固定使用一张 GPU')
+parser.add_argument('--gpus', type=int, choices=(2,), default=2,
+                    help='本轮固定使用两张 GPU，全局 batch 12 由两卡共享')
 args = parser.parse_args()
 if args.backbone == 'XXTiny' or args.backbone == 'xxtiny':
     backbone = GCViTXXTiny
@@ -79,15 +79,17 @@ elif args.backbone == 'Base' or args.backbone == 'base':
 elif args.backbone == 'Large' or args.backbone == 'large':
     backbone = GCViTLarge
 
-# 本轮明确使用单卡；设备不符合要求直接报错，不自动改用 CPU 或 TPU。
+# 单卡 batch 12 已发生显存不足，恢复两卡镜像训练；设备不足直接报错。
+# batch 仍是两卡合计 12，每卡约 6 对，不按 GPU 数增加 batch 或学习率。
 gpus = tf.config.list_physical_devices('GPU')
-if len(gpus) != 1:
-    raise RuntimeError(f'Est 本轮要求恰好一张可见 GPU，实际为 {gpus}')
-tf.config.experimental.set_memory_growth(gpus[0], True)
+if len(gpus) != 2:
+    raise RuntimeError(f'Est 本轮要求恰好两张可见 GPU，实际为 {gpus}')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 # GCViT resize_query=True 的双三次缩放在 TF 2.10 中需要 CPU 内核。
-# 允许该算子按内核支持情况放置；仍明确要求单张 GPU，并将模型变量放在 GPU 上。
+# 允许该算子按内核支持情况放置；模型变量仍在两张 GPU 上各保存一个副本。
 tf.config.set_soft_device_placement(True)
-strategy = tf.distribute.OneDeviceStrategy(device='/GPU:0')
+strategy = tf.distribute.MirroredStrategy(devices=['/GPU:0', '/GPU:1'])
 print("Number of Accelerators: ", strategy.num_replicas_in_sync)
 
 # hyperparameters
@@ -197,7 +199,7 @@ print('EST_CONFIG', json.dumps(run_config, ensure_ascii=False), flush=True)
 
 # model
 with strategy.scope():
-    # 单卡作用域内构建模型及优化器。使用现有 TensorFlow/Keras 2.10 自带 AdamW，
+    # 两卡镜像作用域内构建模型及优化器。使用现有 TensorFlow/Keras 2.10 自带 AdamW，
     # 其衰减更新为 lr * weight_decay * variable；关闭默认 XLA，沿用原训练执行方式。
     lr_schedule = WarmUpCosine(
         learning_rate_base=INIT_LR,
@@ -229,9 +231,14 @@ with strategy.scope():
     model = tf.keras.Model(inputs=[inpSVI, inpSAT], outputs=[output])
 
     model.compile(loss=loss, optimizer=optimizer, metrics=["accuracy"])
-    # 验证权重确实位于 GPU；允许 CPU 专属算子不代表允许整套模型转到 CPU 训练。
-    if any('GPU:0' not in variable.device for variable in model.trainable_variables):
-        raise RuntimeError('Est 模型存在未放置在 GPU:0 的可训练变量，请检查设备策略')
+    # 逐个检查可训练权重的两个镜像副本，确保双卡均承载模型变量。
+    # CPU 专属缩放算子的放置不改变模型权重必须位于两张 GPU 的要求。
+    for variable in model.trainable_variables:
+        replicas = strategy.experimental_local_results(variable)
+        if len(replicas) != 2 or any(
+                f'GPU:{index}' not in replica.device
+                for index, replica in enumerate(replicas)):
+            raise RuntimeError(f'Est 权重未正确镜像到两张 GPU: {variable.name}')
 # model.summary()
 
 ckpt_path = str(TR_RATIO) + '_bestCV.h5'

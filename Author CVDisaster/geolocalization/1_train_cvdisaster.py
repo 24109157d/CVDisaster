@@ -51,7 +51,7 @@ class Configuration:
     # Loss
     label_smoothing: float = 0.1
     # Learning Rate
-    lr: float = 0.00005                # 新版论文基础学习率 1e-4 随 batch 128→64 减半。
+    lr: float = 0.0005                 # 学习率对照：恢复作者公开代码 1e-3 随 batch 128→64 减半的值。
     scheduler: str = "cosine"          # "polynomial" | "cosine" | "constant" | None
     warmup_epochs: int = 1
     lr_end: float = 0.0001             # only for "polynomial"

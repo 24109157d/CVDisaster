@@ -59,7 +59,7 @@ PY
 python -u "$RUN/scripts/prepare_geoloc_data.py" \
   --data-root "$DATA" --preprocess-script "$PWD/0_prepare_splits_and_data.py"
 
-# 新版论文表 3 随机 6:4：两卡、全局 batch 64、LR 5e-5、10 轮。
+# 学习率对照：随机 6:4、两卡、全局 batch 64、LR 5e-4、10 轮，其余设置不变。
 # 训练末尾自动加载测试集 R@1 最佳权重，输出该权重对应的完整 Recall 指标。
 python -u 1_train_cvdisaster.py
 printf 'GEOLOC_FULL_TRAINING_COMPLETED\n'

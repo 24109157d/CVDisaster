@@ -385,3 +385,8 @@ Est `3988672` 在 g0178 首轮训练 OOM，退出码 1:0；启动日志显示 GP
 用户授权重新提交 Est。启动脚本增加容量检查：在初始化 TensorFlow 前及独立预检结束后，核对两张实际可见显卡的 UUID、显存和计算进程；存在计算进程或任一卡空闲显存不足 38000MiB 时直接失败并打印详情，不终止其他进程、不自动更换设备。两卡、全局 batch12、6:4/seed626、AdamW、LR0.03、WD0.05、100轮、10轮预热及所有训练代码保持不变。Shell/Python 语法及空闲、占用、低显存、其他卡进程、设备数错误等模拟检查通过；正式训练容量仍以新作业实际运行结果为准。
 
 超算经临时 SSH 转发的 GitHub CONNECT 中转完成 fast-forward，同步并确认训练提交 `828ab7490eeb050dd140eeb6164ca82ba95137d6`，Shell 检查通过，确认无活动 Est 后只提交一次：`4065685`。提交时 PENDING（Priority），尚未获得训练节点，未验证正式 batch 的容量。远端记录 `runs/submit-est-4065685.json`，本机记录 `.local-cache/job-submissions/est-4065685.json`，日志 `/scratch/liuzeyu/heyinxi/logs/est-4065685.log`。不固定先前短时检查的节点，必须以本作业实际分配及启动检查为准。
+
+
+## 2026-11-05 Est 排除占用节点后重新提交
+
+`4065685` 于22:41:32在g0178启动、22:42:02失败，新增容量检查发现GPU0仍有PID387229占用33474MiB、空闲6958MiB，未进入训练。用户授权换GPU尝试；保留全部训练参数及容量检查，经GitHub同步并核对提交`3dc3f00ae1aaeb186bbcfb3cd628e7d06b7d2ddf`，确认无活动Est后使用`sbatch --parsable --export=ALL --exclude=g0178 slurm/train_est.sbatch`只提交一次：`4066740`（22:49:44）。`scontrol show job`确认ExcNodeList=g0178、两卡、全局batch12对应代码未变，提交时PENDING（Priority），尚未分配节点或验证训练。记录为`runs/submit-est-4066740.json`及本机`.local-cache/job-submissions/est-4066740.json`，日志为`/scratch/liuzeyu/heyinxi/logs/est-4066740.log`。节点排除仅针对本次提交，不永久修改Slurm脚本。

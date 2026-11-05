@@ -84,7 +84,9 @@ gpus = tf.config.list_physical_devices('GPU')
 if len(gpus) != 1:
     raise RuntimeError(f'Est 本轮要求恰好一张可见 GPU，实际为 {gpus}')
 tf.config.experimental.set_memory_growth(gpus[0], True)
-tf.config.set_soft_device_placement(False)
+# GCViT resize_query=True 的双三次缩放在 TF 2.10 中需要 CPU 内核。
+# 允许该算子按内核支持情况放置；仍明确要求单张 GPU，并将模型变量放在 GPU 上。
+tf.config.set_soft_device_placement(True)
 strategy = tf.distribute.OneDeviceStrategy(device='/GPU:0')
 print("Number of Accelerators: ", strategy.num_replicas_in_sync)
 
@@ -227,6 +229,9 @@ with strategy.scope():
     model = tf.keras.Model(inputs=[inpSVI, inpSAT], outputs=[output])
 
     model.compile(loss=loss, optimizer=optimizer, metrics=["accuracy"])
+    # 验证权重确实位于 GPU；允许 CPU 专属算子不代表允许整套模型转到 CPU 训练。
+    if any('GPU:0' not in variable.device for variable in model.trainable_variables):
+        raise RuntimeError('Est 模型存在未放置在 GPU:0 的可训练变量，请检查设备策略')
 # model.summary()
 
 ckpt_path = str(TR_RATIO) + '_bestCV.h5'

@@ -58,6 +58,23 @@ for index in range(1):
 # 预检现有 Keras 的 AdamW API，不安装依赖、不改用其他优化器。
 assert tf.keras.optimizers.experimental.AdamW is not None
 print('EST_SINGLE_GPU_ADAMW_API_OK', flush=True)
+
+# 复现上次失败的 GPU 作用域内双三次缩放及反向传播，验证 CPU 专属算子可以执行。
+# 上面的矩阵运算仍禁用软放置以严格检查 GPU；正式模型允许按算子内核分配设备。
+tf.config.set_soft_device_placement(True)
+with tf.device('/GPU:0'):
+    resize_input = tf.Variable(tf.ones((1, 4, 4, 1)))
+@tf.function
+def resize_gradient():
+    with tf.device('/GPU:0'):
+        with tf.GradientTape() as tape:
+            resized = tf.image.resize(resize_input, (8, 8), method='bicubic')
+            loss = tf.reduce_sum(resized * resized)
+        gradient = tape.gradient(loss, resize_input)
+    return gradient
+gradient = resize_gradient()
+assert gradient is not None and bool(tf.reduce_all(tf.math.is_finite(gradient)).numpy())
+print('EST_BICUBIC_FORWARD_BACKWARD_OK', flush=True)
 PY
 
 # 新版论文对比实验：单卡 Tiny、6:4、batch 12、AdamW、LR 0.03、WD 0.05。

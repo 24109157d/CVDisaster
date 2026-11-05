@@ -328,3 +328,9 @@ Est 权重缓存预检成功，SHA256=90bf9bfaafd086a831e92edbbfbba9450fd56786c2
 | Est | 3971748 | 1 | 12 | 0.03 | 100 | PENDING (Priority) |
 
 两项独立作业各提交一次，均用 `export CVDISASTER_COMMIT=ad24c4969969337f380e0b63f4ce99f199c9a865` 后 `sbatch --parsable --export=ALL slurm/train_<module>.sbatch`；未取消其他作业。对应远端记录为 `runs/submit-geoloc-3971747.json`、`runs/submit-est-3971748.json`；本机副本在 `.local-cache/job-submissions/`，不上传 GitHub。日志分别为 `/scratch/liuzeyu/heyinxi/logs/geoloc-3971747.log`、`/scratch/liuzeyu/heyinxi/logs/est-3971748.log`。提交成功不等于 GPU 训练验证通过，实际显存、反向传播、单卡 AdamW 和最终指标需待作业运行后核查。
+
+## 二十二、修复 Est 的 CPU 专属缩放算子放置（2026-11-05）
+
+Est `3971748` 在首轮启动时因 GCViT 的 ResizeBicubic 只有 CPU 内核而失败：新增的 OneDeviceStrategy 与 set_soft_device_placement(False) 要求该算子在 GPU 执行。此次仅修复设备执行：训练进程启用软设备放置，保持单卡 GPU 策略，显式核查模型可训练变量仍在 GPU:0；不更改 bicubic 插值算法、网络结构、6:4 划分、batch 12、AdamW、LR 0.03、WD 0.05、100 轮或调度参数，不添加参数衰减排除规则。
+
+Slurm 保留严格 GPU 矩阵预检，再增加 GPU 作用域内 bicubic 缩放的前向和反向检查，以实际覆盖上次失败的算子路径。实际 GPU 检查在新正式作业计算节点执行，本地只做语法及 AST 配置一致性检查。Geo 本次仅分析日志和作者实现，不更改任何代码，不提交新 Geo 作业。

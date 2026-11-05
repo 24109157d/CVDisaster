@@ -30,6 +30,36 @@ RUN=/scratch/liuzeyu/heyinxi/runs/est-${SLURM_JOB_ID}
 export PATH="$ENV/bin:$PATH"
 export LD_LIBRARY_PATH="$ENV/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
+# 在初始化 TensorFlow 前检查实际可见显卡，避免再次在被其他进程占用的卡上训练。
+# 仅检查本作业可见的两张卡；打印 UUID 和 Slurm 映射，不能把逻辑编号当物理编号。
+# 每卡至少保留 38000 MiB 空闲显存，并禁止已有计算进程；不修改或终止其他进程。
+check_est_gpu_capacity() {
+python - <<'PY'
+import csv
+import io
+import os
+import subprocess
+
+def query(arguments):
+    return list(csv.reader(io.StringIO(subprocess.check_output(
+        ['nvidia-smi', *arguments, '--format=csv,noheader,nounits'], text=True))))
+
+gpus = query(['--query-gpu=index,uuid,pci.bus_id,memory.total,memory.used,memory.free'])
+assert len(gpus) == 2, f'应仅看到本作业的两张 GPU，实际信息：{gpus}'
+visible_uuids = {row[1].strip() for row in gpus}
+processes = query(['--query-compute-apps=gpu_uuid,pid,process_name,used_gpu_memory'])
+occupied = [row for row in processes if row and row[0].strip() in visible_uuids]
+print('EST_GPU_ALLOCATION', {key: os.environ.get(key) for key in (
+    'SLURM_JOB_ID', 'CUDA_VISIBLE_DEVICES', 'SLURM_JOB_GPUS', 'SLURM_STEP_GPUS')}, flush=True)
+print('EST_GPU_CAPACITY', gpus, 'COMPUTE_PROCESSES', occupied, flush=True)
+assert not occupied, f'分配的 GPU 已有计算进程占用，停止启动：{occupied}'
+assert all(int(row[5].strip()) >= 38000 for row in gpus), \
+    f'分配的 GPU 空闲显存不足 38000 MiB，停止启动：{gpus}'
+print('EST_GPU_CAPACITY_OK', flush=True)
+PY
+}
+check_est_gpu_capacity
+
 # 权重保留在 scratch；Keras 2.10 get_file 的默认 home 缓存通过软链接映射到它。
 test -s "$KERAS_HOME/datasets/gcvit_tiny_weights.h5"
 test -d "$DATA/00_SVI"
@@ -91,6 +121,8 @@ PY
 # 全局 batch 不变，学习率和调度步数不因卡数变化而缩放；逐图展示仍使用主卡。
 # 训练 100 轮、预热 10 轮；目录由 JobID 隔离，不覆盖第一轮 SGD 结果。
 # 正式分类报告基于完整测试集，estimation.txt 仅用于作者原有逐图展示。
+# 前面的独立 TensorFlow 预检退出后再检查一次，避免预检期间出现的新占用被忽略。
+check_est_gpu_capacity
 python -u 2_cv.py --tr-ratio 0.6 --backbone tiny --gpus 2
 test -s 0.6_bestCV.h5
 python -u 3_estimation.py --tr-ratio 0.6 --backbone tiny

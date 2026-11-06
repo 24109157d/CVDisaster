@@ -115,6 +115,24 @@ def distributed_sum():
 assert strategy.num_replicas_in_sync == 2
 assert float(distributed_sum().numpy()) == 2.0
 print('EST_TWO_GPU_DISTRIBUTION_OK', flush=True)
+
+# 实测本轮恢复的 SGD 两卡更新及报告阶段的新批量预测入口。
+# 测试 5 个样本的不完整 batch，覆盖 1649 个测试样本最后一批的 3/2 分卡情况。
+# 使用独立微型模型，不加载数据、不改正式模型的初始化、优化器或随机种子。
+with strategy.scope():
+    probe = tf.keras.Sequential([
+        tf.keras.layers.InputLayer(input_shape=(2,)),
+        tf.keras.layers.Dense(3, activation='softmax'),
+    ])
+    probe.compile(optimizer=tf.keras.optimizers.SGD(0.01),
+                  loss=tf.keras.losses.SparseCategoricalCrossentropy())
+probe_x = tf.ones((12, 2)).numpy()
+probe_y = tf.zeros((12,), dtype=tf.int32).numpy()
+probe.train_on_batch(probe_x, probe_y)
+probe_predictions = probe.predict_on_batch(probe_x[:5])
+assert probe_predictions.shape == (5, 3)
+assert bool(tf.reduce_all(tf.math.is_finite(probe_predictions)).numpy())
+print('EST_TWO_GPU_SGD_PREDICT_BATCH_OK', flush=True)
 PY
 
 # 作者 GitHub 基线：两卡 Tiny、仅 6:4、全局 batch 12、SGD、LR 0.01、无显式衰减。

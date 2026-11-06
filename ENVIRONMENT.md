@@ -410,3 +410,12 @@ Est `3988672` 在 g0178 首轮训练 OOM，退出码 1:0；启动日志显示 GP
 提交前确认个人无其他活动作业；短时GPU检查4087094因无即时资源未获得显卡，未读到实时占用。正式任务继续排除g0178，保留初始化前及预检后的两次进程/显存检查，任一卡已有计算进程或空闲少于38000MiB直接失败。经GitHub拉取并确认fd3c44f8b1faa7d48ceff37a92401c44da683367，远端Shell/Python/SGD配置检查及权重缓存SHA256验证通过；未改环境依赖或Geo。
 
 只提交一次正式Est：4087098，2026-11-06 12:41:59，初始PENDING（Priority）；scontrol确认gpu2/cpu8/mem60000MiB/24小时/ExcNodeList=g0178，无作业依赖。运行记录runs/submit-est-4087098.json、本机.local-cache/job-submissions/est-4087098.json，日志/scratch/liuzeyu/heyinxi/logs/est-4087098.log。当前无GPU分配，不能称实际训练或主机内存改善已验证。
+
+
+## 2026-11-06 Est best/latest 与显式断点续训
+
+按用户要求取消4087098，Slurm确认CANCELLED，未进入训练。新增est_checkpoints.py：best按测试accuracy严格提高时原子替换；每轮将全部模型权重、SGD优化器状态/iterations、已完成轮次、历史最佳分数/轮次保存到latest，完整写入后原子发布current.json并清理旧快照。latest内部通过硬链接保留对应best，测试了下一轮best写到一半中断时仍能恢复上次完整状态；scratch原子重命名/硬链接检查通过。
+
+新实验默认从ImageNet预训练初始化，不读取其他任务。仅显式传入`sbatch ... slurm/train_est.sbatch --resume-from 旧训练输出目录`才续训，忽略历史续训环境变量。新JobID保存独立输出，不覆盖旧目录；恢复时严格核对训练配置、划分哈希、权重结构和TensorFlow版本。总目标仍200轮，已完成训练时直接测试best；未完整保存轮次重跑，未保存数据迭代器/完整Dropout随机流，不承诺逐位一致。旧版best-only任务不可假装具备latest。使用说明见EST_CHECKPOINTS.md。
+
+SGD、LR0.01、batch12、200轮、10步预热、两卡、6:4及总调度41200步不变，已与成功实验5210411逐项AST核对。Shell及Python语法通过。真实TensorFlow检查在hpxg的两逻辑CPU镜像策略下运行：4087174因Lustre读取等待在框架初始化阶段触及20分钟时限；4087223复测输出EST_CHECKPOINT_ROUNDTRIP_OK，验证模型/optimizer恢复、下一步SGD更新与未中断路径一致、历史best保留、未发布快照忽略及配置不匹配拒绝。检查期间仅在计算节点预读框架文件以缓解共享文件系统I/O，不修改环境依赖；GPU镜像路径仍由正式作业独立微模型预检验证。

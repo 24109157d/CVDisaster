@@ -10,6 +10,7 @@ import tensorflow as tf
 
 from gcvit import GCViTXXTiny, GCViTXTiny, GCViTTiny, GCViTSmall, GCViTBase, GCViTLarge
 from sklearn.metrics import classification_report, precision_score, recall_score
+from est_checkpoints import EstCheckpoints
 
 
 class WarmUpCosine(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -66,6 +67,8 @@ parser.add_argument('--backbone', type=str, default='Tiny',
                     help='sum the integers (default: find the max)')
 parser.add_argument('--gpus', type=int, choices=(2,), default=2,
                     help='本轮固定使用两张 GPU，全局 batch 12 由两卡共享')
+parser.add_argument('--resume-from', type=pathlib.Path,
+                    help='旧作业的训练输出目录，必须包含完整 latest/current.json')
 args = parser.parse_args()
 if args.backbone == 'XXTiny' or args.backbone == 'xxtiny':
     backbone = GCViTXXTiny
@@ -239,18 +242,19 @@ with strategy.scope():
 # model.summary()
 
 ckpt_path = str(TR_RATIO) + '_bestCV.h5'
-ckpt_callback = tf.keras.callbacks.ModelCheckpoint(
-    filepath=ckpt_path,
-    save_best_only=True,
-    save_weights_only=True,
-    monitor='val_accuracy',
-    mode='max',
-    verbose=1)
+# best 仍按测试集 accuracy 严格提高时更新；latest 每轮保存完整续训状态。
+# 恢复时初始轮次和优化器迭代步一起恢复，200 轮是总目标，不再额外训练 200 轮。
+ckpt_callback = EstCheckpoints(model, run_config, ckpt_path, args.resume_from)
 
-history = model.fit(trData,
-    validation_data=vaData,
-    epochs=EPOCHS,
-    callbacks=[ckpt_callback])
+if ckpt_callback.initial_epoch < EPOCHS:
+    history = model.fit(trData,
+        validation_data=vaData,
+        epochs=EPOCHS,
+        initial_epoch=ckpt_callback.initial_epoch,
+        callbacks=[ckpt_callback])
+else:
+    # 若训练已完成而仅评估被中断，恢复后直接测试 best，不重复训练。
+    print('EST_TRAINING_ALREADY_COMPLETE', EPOCHS, flush=True)
 
 model.load_weights(ckpt_path)
 
@@ -279,7 +283,10 @@ report = classification_report(
     yTrue, yPred, target_names=['minor', 'moderate', 'severe'], output_dict=True)
 if len(test_paths) != len(yTrue) or len(yTrue) != len(yPred):
     raise ValueError('测试清单、真实标签及预测数量不一致，拒绝输出截断的逐图结果')
-report['best_epoch'] = int(np.argmax(history.history['val_accuracy'])) + 1
+report['best_epoch'] = int(ckpt_callback.best_epoch.numpy())
+report['best_val_accuracy'] = float(ckpt_callback.best_score.numpy())
+report['completed_epochs'] = ckpt_callback.initial_epoch
+report['optimizer_steps'] = int(optimizer.iterations.numpy())
 report['checkpoint'] = ckpt_path
 pathlib.Path('est_metrics.json').write_text(
     json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')

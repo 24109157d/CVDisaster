@@ -133,6 +133,9 @@ probe_predictions = probe.predict_on_batch(probe_x[:5])
 assert probe_predictions.shape == (5, 3)
 assert bool(tf.reduce_all(tf.math.is_finite(probe_predictions)).numpy())
 print('EST_TWO_GPU_SGD_PREDICT_BATCH_OK', flush=True)
+# 在正式训练前验证两卡 latest 的恢复、下一步 SGD 更新及 best 保留规则。
+from check_est_checkpoints import verify_checkpoints
+verify_checkpoints(strategy)
 PY
 
 # 作者 GitHub 基线：两卡 Tiny、仅 6:4、全局 batch 12、SGD、LR 0.01、无显式衰减。
@@ -141,7 +144,14 @@ PY
 # 正式分类报告基于完整测试集，estimation.txt 仅用于作者原有逐图展示。
 # 前面的独立 TensorFlow 预检退出后再检查一次，避免预检期间出现的新占用被忽略。
 check_est_gpu_capacity
-python -u 2_cv.py --tr-ratio 0.6 --backbone tiny --gpus 2
+# 默认从预训练权重开始；仅在明确指定旧输出目录时从 latest 续训。
+# 旧结果复制到新 JobID 目录后继续保存，不覆盖或修改旧作业的 best/latest。
+TRAIN_ARGS=(--tr-ratio 0.6 --backbone tiny --gpus 2)
+if [[ -n "${CVDISASTER_EST_RESUME_FROM:-}" ]]; then
+    test -f "$CVDISASTER_EST_RESUME_FROM/latest/current.json"
+    TRAIN_ARGS+=(--resume-from "$CVDISASTER_EST_RESUME_FROM")
+fi
+python -u 2_cv.py "${TRAIN_ARGS[@]}"
 test -s 0.6_bestCV.h5
 python -u 3_estimation.py --tr-ratio 0.6 --backbone tiny
 printf 'EST_FULL_TRAINING_AND_INFERENCE_COMPLETED\n'

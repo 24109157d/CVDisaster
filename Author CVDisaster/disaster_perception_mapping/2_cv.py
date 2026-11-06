@@ -1,5 +1,6 @@
 import argparse
 import csv
+import gc
 import hashlib
 import json
 import numpy as np
@@ -103,13 +104,12 @@ SAT_IMG_H = 512
 SAT_IMG_W = 512
 SAT_IMAGE_SIZE = [SAT_IMG_H, SAT_IMG_W]
 SEED = 626
-# 新版论文明确规定 AdamW、100 轮、基础学习率 0.03、衰减 0.05 和 10 轮预热。
-# 论文未规定预热起点，沿用作者 GitHub 的 0.001，不增加额外参数衰减排除规则。
-EPOCHS = 100
-WARMUP_EPOCHS = 10
-INIT_LR = 0.03
+# 按作者公开 GitHub 训练代码恢复基线：预热单位为优化步，不能乘每轮 batch 数。
+# SGD 不显式增加 momentum、weight decay、梯度裁剪或参数衰减排除规则。
+EPOCHS = 200
+WARMUP_STEPS = 10
+INIT_LR = 0.01
 WAMRUP_LR = 0.001
-WEIGHT_DECAY = 0.05
 
 # build dataset
 dirSVI = pathlib.Path('/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN/00_SVI')
@@ -183,13 +183,12 @@ vaData = ConfigureData(vaData)
 # batch() 保留最后一个不完整 batch，必须用实际 cardinality 换算轮数和优化步数。
 STEPS_PER_EPOCH = int(trData.cardinality().numpy())
 TOTAL_STEPS = STEPS_PER_EPOCH * EPOCHS
-WARMUP_STEPS = STEPS_PER_EPOCH * WARMUP_EPOCHS
 run_config = {
-    'protocol': '2025-paper-est-adamw', 'backbone': args.backbone,
+    'protocol': 'github-est-sgd', 'backbone': args.backbone,
     'train_ratio': TR_RATIO, 'split_seed': SEED, 'gpus': args.gpus,
-    'batch_size': BATCH_SIZE, 'epochs': EPOCHS, 'optimizer': 'AdamW',
-    'base_lr': INIT_LR, 'warmup_lr': WAMRUP_LR, 'weight_decay': WEIGHT_DECAY,
-    'warmup_epochs': WARMUP_EPOCHS, 'steps_per_epoch': STEPS_PER_EPOCH,
+    'batch_size': BATCH_SIZE, 'epochs': EPOCHS, 'optimizer': 'SGD',
+    'base_lr': INIT_LR, 'warmup_lr': WAMRUP_LR, 'weight_decay': None,
+    'momentum': 0.0, 'nesterov': False, 'steps_per_epoch': STEPS_PER_EPOCH,
     'warmup_steps': WARMUP_STEPS, 'total_steps': TOTAL_STEPS,
     'weight_decay_exclusions': [], 'splits': split_manifest,
 }
@@ -199,16 +198,14 @@ print('EST_CONFIG', json.dumps(run_config, ensure_ascii=False), flush=True)
 
 # model
 with strategy.scope():
-    # 两卡镜像作用域内构建模型及优化器。使用现有 TensorFlow/Keras 2.10 自带 AdamW，
-    # 其衰减更新为 lr * weight_decay * variable；关闭默认 XLA，沿用原训练执行方式。
+    # 保留两卡所需的作用域适配；优化器调用与作者 GitHub 完全相同，使用默认 SGD 参数。
     lr_schedule = WarmUpCosine(
         learning_rate_base=INIT_LR,
         total_steps=TOTAL_STEPS,
         warmup_learning_rate=WAMRUP_LR,
         warmup_steps=WARMUP_STEPS,
     )
-    optimizer = tf.keras.optimizers.experimental.AdamW(
-        learning_rate=lr_schedule, weight_decay=WEIGHT_DECAY, jit_compile=False)
+    optimizer = tf.keras.optimizers.SGD(lr_schedule)
     loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
     subModelSVI = backbone(input_shape=(SVI_IMG_H, SVI_IMG_W, 3), pretrain=True, resize_query=True)
@@ -257,8 +254,19 @@ history = model.fit(trData,
 
 model.load_weights(ckpt_path)
 
-yTrue = np.concatenate([y for (_, _), y in vaData], axis=0)
-yPred = np.argmax(np.concatenate([model.predict((x0, x1)) for (x0, x1), _ in vaData], axis=0), axis=1)
+# 训练结束后释放训练数据缓存；评估仍加载同一个最佳 checkpoint。
+# 原循环反复 model.predict 会反复创建数据适配器；改用两卡策略支持的 predict_on_batch。
+# 仅保留每批标签与三个类别的概率，评估样本、顺序、argmax 和汇总定义均不改变。
+del trData
+gc.collect()
+test_labels = []
+test_predictions = []
+for (x0, x1), labels in vaData:
+    probabilities = model.predict_on_batch((x0, x1))
+    test_labels.append(labels.numpy())
+    test_predictions.append(np.argmax(probabilities, axis=1))
+yTrue = np.concatenate(test_labels, axis=0)
+yPred = np.concatenate(test_predictions, axis=0)
 
 print(classification_report(yTrue, yPred, target_names=['minor', 'moderate', 'severe'], digits=5))
 overallP = precision_score(yTrue, yPred, average='macro')

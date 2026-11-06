@@ -390,3 +390,14 @@ Est `3988672` 在 g0178 首轮训练 OOM，退出码 1:0；启动日志显示 GP
 ## 2026-11-05 Est 排除占用节点后重新提交
 
 `4065685` 于22:41:32在g0178启动、22:42:02失败，新增容量检查发现GPU0仍有PID387229占用33474MiB、空闲6958MiB，未进入训练。用户授权换GPU尝试；保留全部训练参数及容量检查，经GitHub同步并核对提交`3dc3f00ae1aaeb186bbcfb3cd628e7d06b7d2ddf`，确认无活动Est后使用`sbatch --parsable --export=ALL --exclude=g0178 slurm/train_est.sbatch`只提交一次：`4066740`（22:49:44）。`scontrol show job`确认ExcNodeList=g0178、两卡、全局batch12对应代码未变，提交时PENDING（Priority），尚未分配节点或验证训练。记录为`runs/submit-est-4066740.json`及本机`.local-cache/job-submissions/est-4066740.json`，日志为`/scratch/liuzeyu/heyinxi/logs/est-4066740.log`。节点排除仅针对本次提交，不永久修改Slurm脚本。
+
+
+## 2026-11-06 Est 恢复作者 GitHub 的 6:4 基线
+
+作业4066740完成100轮后，在最终测试预测中因主机内存超限被Slurm终止（OUT_OF_MEMORY，00:40:22—07:51:27，g0166，MaxRSS=58193.11MiB）；最佳权重来自第1轮，测试accuracy=36.1431%，后续未改善，未生成最终P/R/F1。训练末accuracy=38.11%、测试accuracy=36.14%，与两组中等损伤类占比相符，提示可能退化为多数类预测；尚未用逐样本预测证实，不能将退化直接归因于单独一个超参数。本次两次GPU容量检查均通过，和此前GPU被其他进程占用的故障分开记录。
+
+用户要求以公开GitHub代码为准，只复现6:4。核对来源：https://github.com/tum-bgd/CVDisaster/blob/a303dd8e1d636c36d8688813fb66e9de3842c99c/disaster_perception_mapping/2_cv.py （文件最近变更提交a303dd8e1d636c36d8688813fb66e9de3842c99c）。恢复SGD(lr_schedule)默认参数、LR0.01、200轮、warmup起点0.001、固定10个优化步预热，不再使用AdamW/WD0.05/100轮/10轮预热。保留作者WarmUpCosine公式、batch12、Tiny双分支、SVI512×1024及sat512×512、seed626、shuffle后take/skip、cache/batch/prefetch、损失及val_accuracy选最佳权重；6:4为2472训练/1649测试，每轮206步，总调度41200步。
+
+工程差异继续明确保留：两卡MirroredStrategy及作用域、CPU专属bicubic软放置、超算数据/权重路径、GPU容量检查、24小时作业上限、划分和完整指标文件。作者3_estimation.py硬编码0.5，继续改为读取--tr-ratio=0.6及对应最佳权重。为处理本次报告阶段OOM，训练结束后释放训练数据缓存，预测改为predict_on_batch逐批保留标签和类别索引；不参与训练、最佳权重选择或改变测试样本。未改Geo，未提交新训练。
+
+验证：与公开代码逐项AST比对WarmUpCosine、GetLabel、LoadImg、ProcessPath、ConfigureData、模型创建、调度、SGD、损失、compile、fit、checkpoint配置均匹配；Shell及内嵌Python语法通过。两卡执行及训练后内存改善仍需超算真实运行验证，本地无TensorFlow运行测试。

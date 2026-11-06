@@ -419,3 +419,8 @@ Est `3988672` 在 g0178 首轮训练 OOM，退出码 1:0；启动日志显示 GP
 新实验默认从ImageNet预训练初始化，不读取其他任务。仅显式传入`sbatch ... slurm/train_est.sbatch --resume-from 旧训练输出目录`才续训，忽略历史续训环境变量。新JobID保存独立输出，不覆盖旧目录；恢复时严格核对训练配置、划分哈希、权重结构和TensorFlow版本。总目标仍200轮，已完成训练时直接测试best；未完整保存轮次重跑，未保存数据迭代器/完整Dropout随机流，不承诺逐位一致。旧版best-only任务不可假装具备latest。使用说明见EST_CHECKPOINTS.md。
 
 SGD、LR0.01、batch12、200轮、10步预热、两卡、6:4及总调度41200步不变，已与成功实验5210411逐项AST核对。Shell及Python语法通过。真实TensorFlow检查在hpxg的两逻辑CPU镜像策略下运行：4087174因Lustre读取等待在框架初始化阶段触及20分钟时限；4087223复测输出EST_CHECKPOINT_ROUNDTRIP_OK，验证模型/optimizer恢复、下一步SGD更新与未中断路径一致、历史best保留、未发布快照忽略及配置不匹配拒绝。检查期间仅在计算节点预读框架文件以缓解共享文件系统I/O，不修改环境依赖；GPU镜像路径仍由正式作业独立微模型预检验证。
+
+
+2026-11-06 13:44:30 同步并确认训练提交9a1c50c3eb1bdc213292b0af3ff6298cff4062bd，权重缓存SHA256和远端语法检查通过，无重复活动Est后只提交一次4087311，替代已取消的4087098。本次为fresh_pretrained、resume_from=null，没有传--resume-from，清除历史续训环境变量；两卡、6:4、SGD0.01、200轮、10步预热、batch12、60000MiB和24小时保持不变。scontrol确认ExcNodeList=g0178，提交时PENDING（Priority），未获得GPU。提交前短时占用检查4087308因资源忙未获卡，正式作业启动时仍须通过两次GPU占用/显存检查和两卡checkpoint闭环预检。
+
+真实CPU检查4087223.batch最终COMPLETED、退出码0:0、耗时14分15秒；辅助预读step的编码错误/时限不属于正式checkpoint断言结果。新任务记录runs/submit-est-4087311.json、本机.local-cache/job-submissions/est-4087311.json，日志/scratch/liuzeyu/heyinxi/logs/est-4087311.log。CPU检查通过不等于正式GCViT全尺寸两卡训练/内存已验证。

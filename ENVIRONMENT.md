@@ -401,3 +401,12 @@ Est `3988672` 在 g0178 首轮训练 OOM，退出码 1:0；启动日志显示 GP
 工程差异继续明确保留：两卡MirroredStrategy及作用域、CPU专属bicubic软放置、超算数据/权重路径、GPU容量检查、24小时作业上限、划分和完整指标文件。作者3_estimation.py硬编码0.5，继续改为读取--tr-ratio=0.6及对应最佳权重。为处理本次报告阶段OOM，训练结束后释放训练数据缓存，预测改为predict_on_batch逐批保留标签和类别索引；不参与训练、最佳权重选择或改变测试样本。未改Geo，未提交新训练。
 
 验证：与公开代码逐项AST比对WarmUpCosine、GetLabel、LoadImg、ProcessPath、ConfigureData、模型创建、调度、SGD、损失、compile、fit、checkpoint配置均匹配；Shell及内嵌Python语法通过。两卡执行及训练后内存改善仍需超算真实运行验证，本地无TensorFlow运行测试。
+
+
+## 2026-11-06 Est GitHub SGD 6:4 基线重新提交
+
+逐项比对成功作业3956738的训练提交5210411：WarmUpCosine、数据处理/缓存、SGD及默认参数、损失、模型与分类头、compile、fit、checkpoint选择、batch12、输入尺寸、seed626、200轮及10步预热均通过AST一致性检查。6:4相较成功的5:5增加训练样本及每轮步数，总调度按206×200=41200计算；保留两卡作用域、软放置及记录适配。独立预检新增两卡微型模型SGD更新和predict_on_batch处理5样本尾批；实际执行仍待分配计算节点。
+
+提交前确认个人无其他活动作业；短时GPU检查4087094因无即时资源未获得显卡，未读到实时占用。正式任务继续排除g0178，保留初始化前及预检后的两次进程/显存检查，任一卡已有计算进程或空闲少于38000MiB直接失败。经GitHub拉取并确认fd3c44f8b1faa7d48ceff37a92401c44da683367，远端Shell/Python/SGD配置检查及权重缓存SHA256验证通过；未改环境依赖或Geo。
+
+只提交一次正式Est：4087098，2026-11-06 12:41:59，初始PENDING（Priority）；scontrol确认gpu2/cpu8/mem60000MiB/24小时/ExcNodeList=g0178，无作业依赖。运行记录runs/submit-est-4087098.json、本机.local-cache/job-submissions/est-4087098.json，日志/scratch/liuzeyu/heyinxi/logs/est-4087098.log。当前无GPU分配，不能称实际训练或主机内存改善已验证。

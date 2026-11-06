@@ -144,12 +144,17 @@ PY
 # 正式分类报告基于完整测试集，estimation.txt 仅用于作者原有逐图展示。
 # 前面的独立 TensorFlow 预检退出后再检查一次，避免预检期间出现的新占用被忽略。
 check_est_gpu_capacity
-# 默认从预训练权重开始；仅在明确指定旧输出目录时从 latest 续训。
+# 默认从预训练权重开始；仅显式传入 --resume-from 旧输出目录时从 latest 续训。
 # 旧结果复制到新 JobID 目录后继续保存，不覆盖或修改旧作业的 best/latest。
+# 不从环境变量推断续训路径，避免新实验意外继承登录 shell 中的历史设置。
 TRAIN_ARGS=(--tr-ratio 0.6 --backbone tiny --gpus 2)
-if [[ -n "${CVDISASTER_EST_RESUME_FROM:-}" ]]; then
-    test -f "$CVDISASTER_EST_RESUME_FROM/latest/current.json"
-    TRAIN_ARGS+=(--resume-from "$CVDISASTER_EST_RESUME_FROM")
+if (( $# > 0 )); then
+    [[ $# == 2 && "$1" == --resume-from ]]
+    test -f "$2/latest/current.json"
+    TRAIN_ARGS+=(--resume-from "$2")
+    printf 'EST_START_MODE=explicit_resume SOURCE=%s\n' "$2"
+else
+    printf 'EST_START_MODE=fresh_pretrained\n'
 fi
 python -u 2_cv.py "${TRAIN_ARGS[@]}"
 test -s 0.6_bestCV.h5

@@ -442,3 +442,10 @@ latest/current.json指向epoch-0200-6bc5c2f6be5141e5a159821c391b7c40，完整ind
 补查3956738完整日志：其最低测试loss在第13轮（.6948），第119轮虽取得最高accuracy .7050，但测试loss已升至2.2213；末轮2.3924。本次4087311最低测试loss在第15轮（.6641），best accuracy在第13轮（.7047），末轮测试loss2.4107。两次训练/测试loss走势相近，均早期泛化见顶后明显过拟合，不能以旧best=119轮推断旧实验到119轮才过拟合。模型、SGD/损失及调度函数AST匹配，预训练缓存SHA相同；本次latest迭代数41200匹配预期。第13轮按公式应有LR约.009912（推算值，原日志未逐步记录LR），未发现调度提前结束的代码证据。SEED626只固定数据划分，不固定分类头及Dropout全部随机性；测试样本随5:5/6:4改变，不能单独归因于比例或优化器。尚无作者原始逐轮日志，不能据指标接近就断言全过程复现无误。
 
 完整对照数据.local-cache/run-logs/20261107/est-successful-runs-comparison.json；曲线.local-cache/run-logs/20261107/est-two-runs-loss-comparison.png。此次只分析与记录，未修改训练参数、未提交新作业。
+
+
+### Est 过拟合原因分析与输入兼容性待查项
+
+当前证据优先支持：2472对训练样本上双GCViTTiny全量微调（latest权重形状统计55483743个标量参数），没有先冻结骨干训练随机分类头；公开管线只有decode/resize/cache/batch/prefetch，没有随机图像增强，SGD无显式weight decay。模型不是完全没有正则：头部Dropout .2，实际gcvit1.1.6的Tiny配置path_drop=.2，drop_rate和attn_drop默认0。10步预热仅约.05轮，第15轮起始LR按公式仍约.00988；对该数据量全量微调可能更新偏强、持续200轮强化记忆。这些为有代码/曲线支持的风险条件，尚未单变量验证其各自贡献。
+
+新查明兼容性风险：gcvit1.1.6主干forward_features直接patch_embed，没有输入Rescaling/ImageNet preprocess；当前及作者2_cv.py均只decode_png后resize，输入仍0—255。GCViT库README示例显式使用tf.keras.applications.imagenet_utils.preprocess_input(...,mode='torch')。因此输入与ImageNet预训练使用约定可能不匹配，是优先受控验证项；不等同于已经证明过拟合根因，尚未修改基线或提交标准化实验。来源https://github.com/awsaf49/gcvit-tf#usage及公开CVDisaster训练代码。训练集类别数822/942/708，不支持将明显类别失衡直接认作主因。旧SGD实验未加本轮latest回调时已出现近同样loss趋势，latest保存不是首要怀疑对象。仅作分析记录，未改训练代码。

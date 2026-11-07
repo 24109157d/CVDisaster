@@ -424,3 +424,14 @@ SGD、LR0.01、batch12、200轮、10步预热、两卡、6:4及总调度41200步
 2026-11-06 13:44:30 同步并确认训练提交9a1c50c3eb1bdc213292b0af3ff6298cff4062bd，权重缓存SHA256和远端语法检查通过，无重复活动Est后只提交一次4087311，替代已取消的4087098。本次为fresh_pretrained、resume_from=null，没有传--resume-from，清除历史续训环境变量；两卡、6:4、SGD0.01、200轮、10步预热、batch12、60000MiB和24小时保持不变。scontrol确认ExcNodeList=g0178，提交时PENDING（Priority），未获得GPU。提交前短时占用检查4087308因资源忙未获卡，正式作业启动时仍须通过两次GPU占用/显存检查和两卡checkpoint闭环预检。
 
 真实CPU检查4087223.batch最终COMPLETED、退出码0:0、耗时14分15秒；辅助预读step的编码错误/时限不属于正式checkpoint断言结果。新任务记录runs/submit-est-4087311.json、本机.local-cache/job-submissions/est-4087311.json，日志/scratch/liuzeyu/heyinxi/logs/est-4087311.log。CPU检查通过不等于正式GCViT全尺寸两卡训练/内存已验证。
+
+
+## 2026-11-07 Est SGD 6:4 结果（4087311）
+
+任务COMPLETED、退出码0:0，在g0142使用两张A100（SLURM_JOB_GPUS=1,3，逻辑0,1），2026-11-06 13:50:59—2026-11-07 06:02:38，耗时16:11:39。两次GPU容量检查及两卡checkpoint闭环预检通过，正式入口EST_START_MODE=fresh_pretrained；日志中的EST_RESUMED来自/tmp微模型预检，不代表正式训练读取旧任务。完成200轮/41200优化步及最终完整测试、逐图展示，打印EST_FULL_TRAINING_AND_INFERENCE_COMPLETED，主机MaxRSS=54988.75MiB，未出现OOM。
+
+最佳checkpoint为第13轮0.6_bestCV.h5，完整1649对测试集：OA=70.4669497%，macro P=71.5919565%，macro R=71.0570948%，macro F1=0.71213835，weighted F1=0.70632051。相较新版论文6:4的OA71.38/P73.13/R71.73低0.91/1.54/0.67个百分点；论文整体F1=.73汇总定义未明确，不将其直接等同macro F1。逐类P/R/F1：minor .76616/.68889/.72547（585）；moderate .59816/.65436/.62500（596）；severe .78344/.78846/.78594（468）。est_predictions.csv共1649行，作者逐图展示estimation.txt因尺寸筛选只有1648行，正式指标使用完整预测CSV。
+
+latest/current.json指向epoch-0200-6bc5c2f6be5141e5a159821c391b7c40，完整index及222062982字节data文件存在，状态completed_epochs=200、optimizer_steps=41200、best_epoch=13，独立best快照存在。末轮训练loss=.0016/accuracy=.9992，测试loss=2.4107/accuracy=.6895，支持后期过拟合；最终报告使用第13轮best，而非第200轮latest。不能把与旧AdamW任务的差异单独归因于优化器，其他训练设置也发生了变化。
+
+原始结果位于/scratch/liuzeyu/heyinxi/runs/est-4087311/Author CVDisaster/disaster_perception_mapping/；日志/scratch/liuzeyu/heyinxi/logs/est-4087311.log。轻量报告归档runs/est-4087311-report.tar.gz保留指标、配置、完整预测、划分及latest元数据，不含大权重；本机记录.local-cache/run-logs/20261107/est-4087311-metrics.json。

@@ -435,3 +435,10 @@ SGD、LR0.01、batch12、200轮、10步预热、两卡、6:4及总调度41200步
 latest/current.json指向epoch-0200-6bc5c2f6be5141e5a159821c391b7c40，完整index及222062982字节data文件存在，状态completed_epochs=200、optimizer_steps=41200、best_epoch=13，独立best快照存在。末轮训练loss=.0016/accuracy=.9992，测试loss=2.4107/accuracy=.6895，支持后期过拟合；最终报告使用第13轮best，而非第200轮latest。不能把与旧AdamW任务的差异单独归因于优化器，其他训练设置也发生了变化。
 
 原始结果位于/scratch/liuzeyu/heyinxi/runs/est-4087311/Author CVDisaster/disaster_perception_mapping/；日志/scratch/liuzeyu/heyinxi/logs/est-4087311.log。轻量报告归档runs/est-4087311-report.tar.gz保留指标、配置、完整预测、划分及latest元数据，不含大权重；本机记录.local-cache/run-logs/20261107/est-4087311-metrics.json。
+
+
+### 两次 SGD loss 曲线复核
+
+补查3956738完整日志：其最低测试loss在第13轮（.6948），第119轮虽取得最高accuracy .7050，但测试loss已升至2.2213；末轮2.3924。本次4087311最低测试loss在第15轮（.6641），best accuracy在第13轮（.7047），末轮测试loss2.4107。两次训练/测试loss走势相近，均早期泛化见顶后明显过拟合，不能以旧best=119轮推断旧实验到119轮才过拟合。模型、SGD/损失及调度函数AST匹配，预训练缓存SHA相同；本次latest迭代数41200匹配预期。第13轮按公式应有LR约.009912（推算值，原日志未逐步记录LR），未发现调度提前结束的代码证据。SEED626只固定数据划分，不固定分类头及Dropout全部随机性；测试样本随5:5/6:4改变，不能单独归因于比例或优化器。尚无作者原始逐轮日志，不能据指标接近就断言全过程复现无误。
+
+完整对照数据.local-cache/run-logs/20261107/est-successful-runs-comparison.json；曲线.local-cache/run-logs/20261107/est-two-runs-loss-comparison.png。此次只分析与记录，未修改训练参数、未提交新作业。

@@ -43,7 +43,7 @@
 
 已确认作业 `3979539` 的已有 best checkpoint：`/scratch/liuzeyu/heyinxi/runs/geoloc-3979539/Author CVDisaster/geolocalization/cvdisaster/convnext_base.fb_in22k_ft_in1k_384/111318/weights_e10_79.8059.pth`。
 
-环境为 `/scratch/liuzeyu/anaconda3/envs/cvdisaster_geoloc`，Python 3.10.22、PyTorch `1.13.1+cu116`、torchvision `0.14.1+cu116`、timm `0.8.19.dev0`，版本已通过 metadata 核对。提交前账户队列为空。2026-11-11 15:02 的存储检查为：`/scratch` 已使用约 996.1 GiB，配额 3 TiB，文件数量 911,318，上限 1,000,000。
+环境为 `/scratch/liuzeyu/anaconda3/envs/cvdisaster_geoloc`，Python 3.10.22、PyTorch `1.13.1+cu116`、torchvision `0.14.1+cu116`、timm `0.8.19.dev0`，版本已通过 metadata 核对。提交前账户队列为空。2026-11-11 21:45 的存储检查为：`/scratch` 已使用约 996.1 GiB，配额 3 TiB，文件数量 911,432，上限 1,000,000。
 
 本地 Python 编译、Pyflakes 和作业脚本语法检查通过。完整运行结果由本次正式作业产生。
 
@@ -56,6 +56,8 @@
 5. 保存基线逐查询预测，生成四项 Recall 的百分点差与正确性比较。
 
 提交后返回状态为 `PENDING (Priority)`，时间上限为 `1-00:00:00`。本次已提交的计算作业数量为一个。提交进程提前导出训练参数，清除用户环境获取选项，并使用纯 `--export=ALL` 将当前环境传递给 Slurm。
+
+2026-11-11 21:45 核对：作业已于 21:42:48 在 `g0153` 开始运行，状态为 `RUNNING`，`Restarts=0`，分配两张 A100、8 个 CPU 和 60,000 MiB 主机内存。
 
 ## 提交命令
 

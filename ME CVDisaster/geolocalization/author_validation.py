@@ -11,10 +11,18 @@ from .evaluation import rank_similarities
 from .runtime import parallel_model, sha256, write_json
 
 
-def validate_author_evaluation(checkpoint_path, loaders, common_result, config, output):
+def validate_author_evaluation(checkpoint_path, loaders, common_result, config, output,
+                               checkpoint_format="experiment"):
     author_model = TimmModel(config["backbone"], pretrained=False, img_size=384)
     saved = torch.load(checkpoint_path, map_location="cpu")
-    author_model.load_state_dict(saved["model"], strict=True)
+    if checkpoint_format == "author":
+        state = saved
+    elif checkpoint_format == "experiment":
+        state = saved["model"]
+    else:
+        raise ValueError("checkpoint_format 必须为 author 或 experiment")
+    author_model.load_state_dict(state, strict=True)
+    del state
     del saved
     raw_dtypes = []
     handle = author_model.register_forward_hook(lambda module, inputs, result: raw_dtypes.append(str(result.dtype)))

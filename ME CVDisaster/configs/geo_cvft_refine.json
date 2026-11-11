@@ -4,8 +4,16 @@
   "data_root": "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN",
   "cvusa_checkpoint": "/scratch/liuzeyu/heyinxi/pretrained/weights_e40_98.6830.pth",
   "cvusa_sha256": "739cf00d303836fba1195f1bb8d54c4b13c53926ce3212fc9ceced335fc59a23",
-  "seeds": [42, 43, 44],
+  "seed": 42,
+  "training_architecture": "geo_cvft_refine",
   "architectures": ["baseline", "geo_cvft_refine"],
+  "baseline_reference": {
+    "job_id": "3979539",
+    "seed": 42,
+    "training_commit": "8ca60d598d2c306930b1b61d80c098ece846efeb",
+    "checkpoint": "/scratch/liuzeyu/heyinxi/runs/geoloc-3979539/Author CVDisaster/geolocalization/cvdisaster/convnext_base.fb_in22k_ft_in1k_384/111318/weights_e10_79.8059.pth",
+    "metrics": {"R@1": 79.8059, "R@5": 97.8169, "R@10": 98.9691, "R@1%": 99.5149}
+  },
   "epochs": 10,
   "batch_size": 64,
   "batch_size_eval": 128,

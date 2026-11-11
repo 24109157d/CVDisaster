@@ -1,4 +1,5 @@
 import argparse
+import gc
 import json
 from pathlib import Path
 import shutil
@@ -8,10 +9,11 @@ import torch
 from torch.cuda.amp import GradScaler, autocast
 from transformers import get_cosine_schedule_with_warmup
 
-from .author_validation import validate_author_evaluation
+from .comparison import compare_results
 from .data import make_datasets, make_loaders, shuffle_training
 from .evaluation import evaluate, mine_neighbours, save_predictions
 from .loss import contrastive_loss
+from .reference import evaluate_baseline_reference
 from .runtime import (environment, initialize, load_initial_model, memory_usage, new_output,
                       parallel_model, random_state, read_config, require_compute_node, sha256, write_json)
 
@@ -106,8 +108,9 @@ def checkpoint(model, optimizer, scheduler, scaler, epoch, step, best_epoch, bes
 def run_training(args):
     require_compute_node()
     config = read_config(args.config)
-    if args.seed not in config["seeds"] or args.architecture not in config["architectures"]:
-        raise ValueError("模型或训练随机种子不属于方案配置")
+    if args.seed != config["seed"] or args.architecture != config["training_architecture"]:
+        raise ValueError("本次正式训练要求 geo_cvft_refine、seed=42")
+    baseline_checkpoint_sha256 = sha256(config["baseline_reference"]["checkpoint"])
     output = new_output(args.output)
     backend = initialize(args.seed)
     started = time.perf_counter()
@@ -129,6 +132,8 @@ def run_training(args):
     metadata = {"environment": environment(), "backend": backend, "data_config": data_config,
                 "initial_logit_scales": initial_scales, "split_manifest": manifest,
                 "initial_fusion": model.module.fusion_state(),
+                "baseline_reference": config["baseline_reference"],
+                "baseline_checkpoint_sha256": baseline_checkpoint_sha256,
                 "trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
                 "transforms": transforms, "architecture": args.architecture, "seed": args.seed,
                 "scheme": config["scheme"], "config": config}
@@ -180,9 +185,6 @@ def run_training(args):
     result = evaluate(model, loaders, checkpoint_id=sha256(output / "best.pth"))
     if result["metrics"]["R@1"] != best_score or not torch.equal(result["ranks"], best_ranks):
         raise RuntimeError("重新加载 best 后的完整查询排名与保存时不一致")
-    if args.architecture == "baseline":
-        result["author_evaluation_consistency"] = validate_author_evaluation(
-            output / "best.pth", loaders, result, config, output)
     summary = save_predictions(result, datasets["test_ground"], output, config)
     summary.update(best_epoch=best_epoch, total_steps=step, architecture=args.architecture,
                    seed=args.seed, scheme=config["scheme"],
@@ -190,13 +192,28 @@ def run_training(args):
                    best_checkpoint=str(output / "best.pth"), last_checkpoint=str(output / "last.pth"),
                    checkpoint_reload_verified=True)
     write_json(output / "result.json", summary)
+    # 改进模型训练和 best 评价完成后，读取已有基线权重补充逐查询预测。
+    # 基线仅参与评价；模型、optimizer 和 GradScaler 的训练资源在此释放。
+    del result, best, model, optimizer, scheduler, scaler
+    gc.collect()
+    torch.cuda.empty_cache()
+    baseline_summary = evaluate_baseline_reference(
+        config, loaders, datasets["test_ground"], output / "baseline_reference", baseline_checkpoint_sha256)
+    comparison = compare_results(output, output / "baseline_reference/best_queries.csv", output / "comparison")
+    summary.update(baseline_reference_result=str(output / "baseline_reference/result.json"),
+                   baseline_author_evaluation_verified=baseline_summary["author_evaluation_consistency"]["passed"],
+                   comparison=str(output / "comparison/comparison.json"),
+                   metric_differences={name: values["difference_percentage_points"]
+                                       for name, values in comparison["metrics"].items()},
+                   total_run_seconds=time.perf_counter() - started)
+    write_json(output / "result.json", summary)
     print(json.dumps(summary, ensure_ascii=False, allow_nan=False), flush=True)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="训练 CVDisaster Geo 成对比较实验")
+    parser = argparse.ArgumentParser(description="训练 geo_cvft_refine，使用 seed=42 与已有基线比较")
     parser.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "configs/geo_cvft_refine.json"))
-    parser.add_argument("--architecture", choices=("baseline", "geo_cvft_refine"), required=True)
-    parser.add_argument("--seed", type=int, choices=(42, 43, 44), required=True)
+    parser.add_argument("--architecture", choices=("geo_cvft_refine",), default="geo_cvft_refine")
+    parser.add_argument("--seed", type=int, choices=(42,), default=42)
     parser.add_argument("--output", required=True)
     run_training(parser.parse_args())

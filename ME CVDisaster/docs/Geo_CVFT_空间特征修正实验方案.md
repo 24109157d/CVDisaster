@@ -1,10 +1,12 @@
-# CVDisaster Geo 特征映射与空间修正实验方案
+# CVDisaster Geo 特征映射与空间修正实验方案及运行说明
 
 日期：2026-11-11。
 
 方案编号：`geo_cvft_refine`。
 
-状态：模型、训练、评估、配置及验收代码已根据本方案更新，本地静态检查已通过。正在核验运行环境、存储空间和计算资源，随后执行计算节点验收及正式训练。
+状态：模型、训练、评估及结果比较代码已按本方案更新。本次只修改代码并进行本地检查，拟提交的任务及参数需经用户确认后执行。
+
+已有提交情况见 [作业提交记录](Geo_CVFT_2026-11-11_提交记录.md)。该记录描述对应时间的作业状态；本方案规定当前实验安排。本次未提交计算作业。
 
 ## 1 实验问题与比较对象
 
@@ -17,7 +19,9 @@
 
 本实验评价完整组合结构的效果。结论归属于整体网络，单个模块的贡献需要相应证据支持。
 
-当前基线结果来自作业 `3979539`，训练提交为 `8ca60d598d2c306930b1b61d80c098ece846efeb`。保存的日志给出 R@1 为 79.8059%、R@5 为 97.8169%、R@10 为 98.9691%、R@1% 为 99.5149%。这些数值作为历史参考，正式比较使用相同训练随机种子的成对结果。
+基线直接使用已完成的 geo 复现结果，来自作业 `3979539`，训练提交为 `8ca60d598d2c306930b1b61d80c098ece846efeb`，训练 seed 为 42。保存的日志给出 R@1 为 79.8059%、R@5 为 97.8169%、R@10 为 98.9691%、R@1% 为 99.5149%。这些数值作为本次直接比较依据。
+
+本次训练对象仅为 `geo_cvft_refine`，使用 seed=42 完成一次正式训练。比较时使用上述基线日志、已保存的 checkpoint 和已有预测记录。
 
 本地方案编写时的仓库提交为 `9f495dd79854026a6449e21d34a3d04cfc18d3f4`。未来实验记录填写实际训练代码提交号。
 
@@ -359,7 +363,7 @@ L=\tfrac12\left[
 - 初始 CVUSA 权重：`/scratch/liuzeyu/heyinxi/pretrained/weights_e40_98.6830.pth`。
 - 权重 SHA256：`739cf00d303836fba1195f1bb8d54c4b13c53926ce3212fc9ceced335fc59a23`。
 
-两种网络从同一 CVUSA checkpoint 开始训练。组合模型逐项加载原有 backbone、全局 head 和 `logit_scale`；新增模块按本方案初始化，`fusion_logit` 初始化为零。检查缺失项和多余项，所有与原结构对应的参数必须完整加载。
+组合模型使用与已完成 geo 复现相同的初始 CVUSA checkpoint，逐项加载原有 backbone、全局 head 和 `logit_scale`；新增模块按本方案初始化，`fusion_logit` 初始化为零。检查缺失项和多余项，所有与原结构对应的参数必须完整加载。
 
 ### 9.2 优化参数
 
@@ -377,7 +381,7 @@ L=\tfrac12\left[
 - 梯度处理：AMP unscale 后，沿用逐元素梯度裁剪 `clip_grad_value_=100`。
 - scheduler：cosine，预热长度 39 个优化步，总长度 390 个优化步。
 - DataLoader workers：4。
-- 不自动续训；每次完整实验独立初始化并保存输出。
+- 本次正式训练独立初始化并保存输出，不自动续训。
 
 ### 9.3 自定义采样与调度计数
 
@@ -387,21 +391,21 @@ L=\tfrac12\left[
 
 当前采样方式每轮保留 2,432 对，形成 38 个完整 batch，实际训练共 380 个优化步。每轮剩余的 40 对由当轮采样规则确定。按实际顺序逐步调用 scheduler，记录每轮样本清单、优化步数和学习率。末轮按实际第 380 步所在位置结束。
 
-两种网络分别按照自己的当前检索特征更新训练集难负候选；组合模型使用最终 5,120 维向量进行难负采样。该规则对应对完整检索系统的比较。
+组合模型使用当前最终 5,120 维向量更新训练集难负候选，采样规则沿用已完成 geo 复现。模型产生的实际难负候选可能不同，记录每轮样本清单。该规则对应对完整检索系统的比较。
 
 ### 9.4 随机种子
 
-固定划分 seed 42。训练 seed 使用 `42、43、44`，两种网络分别使用同一组 seed，共六次正式训练，仍然只有两个比较对象。
+数据划分和本次训练均只使用 seed=42。改进模型正式训练次数为一次，训练轮数为 10。
 
-每次固定 Python、NumPy、PyTorch、CUDA 及 DataLoader 的随机生成来源，并记录 GPU、CUDA、cuDNN 和实际后端设置。保留当前基线的后端运行方式；seed 不能保证所有 GPU 算子逐位一致。
+固定 Python、NumPy、PyTorch、CUDA 及 DataLoader 的随机生成来源，并记录 GPU、CUDA、cuDNN 和实际后端设置。保留已完成 geo 复现的后端运行方式；seed 不能保证所有 GPU 算子逐位一致。
 
 ### 9.5 与作者实验的比较范围
 
-直接改进幅度由同条件重新训练的 baseline 与组合模型计算。两种网络共用输入权重、划分清单、预处理、增强规则、全局 batch、GPU 数量、优化器、学习率、训练轮数、调度计数、评价频率、随机种子组及最佳权重选择规则。损失函数共用作者的双向 InfoNCE 和 label smoothing 0.1。
+直接改进幅度由本次组合模型的结果与已完成 geo 复现结果计算。改进模型沿用该次复现的初始输入权重、划分清单、预处理、增强规则、全局 batch、GPU 数量、优化器、学习率、训练轮数、调度计数、评价频率、seed=42 及最佳权重选择规则。损失函数沿用作者的双向 InfoNCE 和 label smoothing 0.1。
 
-当前复现配置为全局 batch 64、LR `5e-4`、随机 6:4。作者公开训练入口默认全局 batch 128、LR `1e-3`，默认划分为 `subarea5`；项目记录的正式论文正文 LR 为 `1e-4`。实验报告分别列出作者论文、公开代码和本次统一训练设置。论文中的随机 6:4 表格提供背景参考，同条件 baseline 提供本次直接比较依据。
+已完成 geo 复现的配置为全局 batch 64、LR `5e-4`、随机 6:4。作者公开训练入口默认全局 batch 128、LR `1e-3`，默认划分为 `subarea5`；项目记录的正式论文正文 LR 为 `1e-4`。实验报告分别列出作者论文、公开代码及本次沿用的复现设置。论文中的随机 6:4 表格提供背景参考，作业 `3979539` 的已完成结果提供本次直接比较依据。
 
-两个模型的结构、可训练参数量、向量维度、实际难负候选及计算量分别记录。使用同一训练规则进行完整模型比较，成绩变化的归因范围为完整组合结构。
+记录改进模型的结构、可训练参数量、向量维度、实际难负候选及计算量，基线对应信息引用已有记录。成绩变化的归因范围为完整组合结构，结论范围为 seed=42 的本次结果。
 
 ## 10 评价与 checkpoint 选择
 
@@ -409,7 +413,7 @@ L=\tfrac12\left[
 
 测试查询为 `val_60.csv` 中的 1,649 张街景，卫星候选为同一清单中的 1,649 张卫星图像。图片 ID 决定唯一正确候选，全部测试查询进入评价。
 
-两种模型共用一份评价入口和排名计算函数。提取最终向量后，统一转换为 FP32，再按特征维度执行 L2 归一化，采用 `eps=1e-12`，随后使用 FP32 矩阵乘法计算完整 `[1649,1649]` 相似度矩阵。该流程保持作者的单位向量点积与排名数学定义，实际数值与作者原 `predict`、`calculate_scores` 的一致性在运行验收中核对。
+改进模型提取最终向量后，转换为 FP32，再按特征维度执行 L2 归一化，采用 `eps=1e-12`，随后使用 FP32 矩阵乘法计算完整 `[1649,1649]` 相似度矩阵。排名计算沿用作者原 `calculate_scores` 的定义，基线直接引用已完成复现的成绩。使用已有基线 checkpoint 核验该评价流程与作者原 `predict`、`calculate_scores` 的数值和指标一致性，核验只执行评估。
 
 评价过程中每个模型只使用所选 checkpoint 的最终向量和参数。候选集合保持完整，测试街景的真实经纬度及损伤标签只用于结果关联或分析，不参与候选筛选或分数计算。融合比例仅由训练集优化，每轮测试不单独调整该比例。
 
@@ -431,17 +435,17 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 
 ### 10.2 最佳权重
 
-每个完整训练轮次结束后评价一次。按最终组合向量的测试集 R@1 严格提高时保存 best，出现相同 R@1 时保留较早的 checkpoint。baseline 按其全局向量使用相同规则。
+改进模型每个完整训练轮次结束后评价一次。按最终组合向量的测试集 R@1 严格提高时保存 best，出现相同 R@1 时保留较早的 checkpoint。该规则沿用已完成 geo 复现的最佳权重选择方式，基线使用其已保存的 best checkpoint。
 
 训练结束后重新加载该轮 best，在完整测试集上重新计算四项指标。最终 R@5、R@10 和 R@1% 均来自该 checkpoint。
 
 另外保存训练结束权重及其训练状态，记录 optimizer、scheduler、GradScaler、已完成轮次和优化步数。checkpoint 必须保存融合参数、共用 `logit_scale` 和模型结构配置。最佳权重与最后一轮权重在文件名和元数据中明确区分。
 
-### 10.3 成对比较
+### 10.3 与已完成 geo 结果比较
 
-对于每个 seed，计算组合模型与 baseline 的 R@1 百分点差，再报告两种模型各自的均值、样本标准差，以及三个成对差值。历史作业 `3979539` 单独列为参考结果。
+分别列出作业 `3979539` 的基线成绩与本次改进模型 best checkpoint 的 R@1、R@5、R@10、R@1%，计算每项指标的百分点差。报告本次 seed=42 的单次训练结果及对应融合比例。
 
-在同一测试 ID 清单上统计：
+使用基线已有的逐查询预测记录，在同一测试 ID 清单上统计以下数量；记录不完整时，使用已保存的基线 best checkpoint 补充评估：
 
 - baseline 错误、组合模型正确的数量。
 - baseline 正确、组合模型错误的数量。
@@ -453,7 +457,7 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 
 ## 11 实现和运行验收
 
-以下检查规定更新后结构的实现验收要求，使用真实数据在计算节点执行。
+以下项目用于核验模型计算、参数更新和评价是否符合设计，涉及 GPU 的检查使用真实数据在计算节点执行。独立验收作业不列入本次运行安排；现有验收脚本的具体行为见第 14.4 节。本次正式实验按第 9.4 节执行。
 
 1. 使用真实 CVIAN 图片核对预处理尺寸、空间特征形状、4×16 和 8×8 的展平及恢复顺序。
 2. 使用真实训练 batch 检查 batch 内 ID 唯一性、同 ID 配对、两张 GPU 特征汇集及 64×64 InfoNCE logits。
@@ -472,7 +476,7 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 
 模型、Dataset、训练入口、评估入口和配置均安排在 `ME CVDisaster/` 内。基线来源保存在 `Author CVDisaster/`，组合模型实现独立管理。
 
-训练输出使用服务器仓库外的独立目录，每次运行按模型名称、seed 和 JobID 标识。记录至少包含：
+改进模型本次训练输出使用服务器仓库外的独立目录，按模型名称、seed=42 和 JobID 标识。基线继续引用作业 `3979539` 的已有输出。记录至少包含：
 
 - 训练代码提交号、方案编号、完整启动参数与实际 Slurm 脚本。
 - 环境、硬件、输入权重 SHA256、划分文件 SHA256。
@@ -483,7 +487,7 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 - best 和训练结束 checkpoint，保存与加载核验结果。
 - 每轮测试指标、best 对应的完整逐查询预测与正确候选排名。
 - 训练时间、预测时间、GPU 显存和主机内存。
-- 两种模型的成对比较结果、作者评价一致性检查及异常说明。
+- 改进模型与已完成 geo 结果的逐项比较、作者评价一致性检查及异常说明。
 
 JobID、实际输出路径、命令及成绩在实施和运行后写入实验记录。当前方案不预填未来运行结果。
 
@@ -494,3 +498,78 @@ JobID、实际输出路径、命令及成绩在实施和运行后写入实验记
 - 现有 geo：共享 ConvNeXt、CVUSA 预训练、图像预处理、InfoNCE、难负采样及评价规则。对应仓库中的 `Author CVDisaster/geolocalization/` 与 `slurm/train_geoloc.sbatch`。
 
 4×16 街景源网格、8×8 卫星目标网格、5,120 维组合向量、可学习融合和空间修正模块的上述具体组合，属于本实验的网络设计。训练采用最终融合向量的作者双向 InfoNCE，CVIAN 上的收益通过本方案规定的训练和比较验证。
+
+参考代码版本：CVFT 为 `YujiaoShi/cross_view_localization_CVFT` 的 `ddf6c2f6d35c0103b9315d686a3135a1a09db5fd`，核心文件为 `script/ot_net.py`；DenseFlow 为 `XianghuiZe/DenseFlow_localization` 的 `16d9f106e9cea4c04458e4cfb9be35f7fba5ece3`，相关文件为 `models_vigor.py`、`gen_BEV/VGG.py` 和 `op_flow/raft.py`。
+
+## 14 代码接口与运行说明
+
+### 14.1 模型和数据接口
+
+`ME CVDisaster/geolocalization/model.py` 提供 `GeoModel`。训练调用 `model(ground, satellite, sample_ids=ids)`，返回两个字典。单视角调用 `model(image, view="ground", sample_ids=ids)` 或 `model(image, view="satellite", sample_ids=ids)`。
+
+返回字典包含 `global_features` 和 `descriptors`；组合模型还包含 `spatial_features` 和 `fusion_weight`，街景另外提供 `transport` 和 `transport_diagnostics`。`fusion_weight` 对每个样本记录同一个模型比例，供 DataParallel 汇集；`fusion_state()` 返回模型共用的标量记录。归一化、融合及损失公式见第 7、8 节。
+
+空间向量按位置、通道顺序展开，搬移使用 `P.transpose(1,2) @ G`。`ME CVDisaster/geolocalization/data.py` 调用作者的 Dataset、transforms，以及仓库根目录 `scripts/prepare_geoloc_data.py` 的 `validate_splits`。共享数据和已有 CSV 仅供读取，具体预处理见第 3 节。
+
+配置文件为 `ME CVDisaster/configs/geo_cvft_refine.json`。两张 GPU 使用 DataParallel 汇集特征后，在主卡计算全局 64×64 InfoNCE。正式训练入口和作业脚本仅接受 `geo_cvft_refine`、seed=42；基线模型接口用于读取已有权重进行评价。
+
+配置中的 `baseline_reference` 记录作业 `3979539` 的训练提交、seed、成绩和 best checkpoint。已确认的权重路径为 `/scratch/liuzeyu/heyinxi/runs/geoloc-3979539/Author CVDisaster/geolocalization/cvdisaster/convnext_base.fb_in22k_ft_in1k_384/111318/weights_e10_79.8059.pth`。
+
+### 14.2 输出文件
+
+训练输出目录包含：
+
+- `run.json`：代码提交号、环境版本、GPU、后端设置、初始 logit scale 与融合比例、可训练参数数量、输入数据配置、增强参数和划分 SHA256。
+- `train_60.csv`、`val_60.csv`：本次运行使用的清单副本。
+- `submitted.sbatch`：实际提交脚本。
+- `steps.jsonl`：最终向量的 InfoNCE 损失、共用 logit scale、更新前后融合参数与比例、融合参数梯度、学习率、GradScaler 和 Sinkhorn 诊断。
+- `samples_epoch_XX.json`、`history.json`：每轮采样顺序、优化步数、评价结果、耗时和内存。
+- `best.pth`：按测试 R@1 严格提高保存的 checkpoint。
+- `last.pth`：训练完成 checkpoint。
+- `best_queries.csv`：全部查询的正确候选排名、分数、同分数量、Top-1 ID 和图片路径。
+- `best_topk.csv`：Top-K 卫星 ID、经纬度、最终分数、两个分支分数、融合比例和图片路径。
+- `best_satellite_features.pt`：完整卫星候选向量、ID、checkpoint SHA256 和融合参数；加载时必须匹配当前 checkpoint 与融合比例。
+- `best_metrics.json`、`result.json`：best 重新加载后的完整指标、分支诊断与资源记录。
+- `baseline_reference/`：读取作业 `3979539` 的已有 best checkpoint 得到的评价、一致性检查及逐查询记录。
+- `comparison/comparison.json`、`comparison/query_comparison.csv`：四项 Recall 的百分点差和全部测试图片的正确性比较。
+
+`best.pth` 和 `last.pth` 均保存模型、共用 logit scale、融合参数、optimizer、scheduler、GradScaler、轮次、优化步数、采样顺序及随机生成器状态。每次评价重新生成候选特征，记录当前模型的 checkpoint 标识和融合比例。
+
+作者评价一致性检查执行时，另行输出 `author_evaluation_consistency.json` 和 `author_evaluation_queries.csv`，保存基线 checkpoint 的一致性结果及逐查询排名。
+
+### 14.3 运行命令
+
+训练、评估和验收入口要求 Slurm 计算节点环境。运行脚本为 `ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch`，每次只执行 `CVDISASTER_MODE` 指定的一项操作。
+
+以下命令供用户确认后执行，本次没有提交作业。提交时记录已同步至服务器的实际代码提交号，并确认账号、分区和资源可用性。作业脚本的时间上限为 24 小时。
+
+```bash
+cd /scratch/liuzeyu/heyinxi/CVDisaster
+export CVDISASTER_COMMIT=$(git rev-parse HEAD)
+
+# 改进模型正式训练一次，seed=42。
+sbatch --export=ALL,CVDISASTER_MODE=train,CVDISASTER_ARCHITECTURE=geo_cvft_refine,CVDISASTER_SEED=42 "ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch"
+```
+
+同一个训练任务执行以下计算：训练前评价一次初始改进模型并生成难负候选；训练 10 个 epoch，每轮结束后评价；训练结束后重新加载 best 计算完整指标。随后读取作业 `3979539` 的已有 best checkpoint，执行当前与作者的评价流程，保存逐查询结果并计算比较统计。已有基线在该过程中的参数更新次数为零。
+
+需要独立读取本次改进模型权重进行评估时，使用以下命令，将路径替换为实际输出目录：
+
+```bash
+export CVDISASTER_CHECKPOINT=/scratch/liuzeyu/heyinxi/runs/geo_cvft_refine-seed42-<JobID>/output/best.pth
+sbatch --export=ALL,CVDISASTER_MODE=evaluate "ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch"
+```
+
+本次结果比较按照第 10.3 节，直接使用作业 `3979539` 的已有结果和本次改进模型结果。训练任务会自动生成比较文件。需要使用已有逐查询记录重新计算比较统计时，调用 `compare.py --run <改进模型output目录> --baseline-queries <基线best_queries.csv> --output <仓库外的新目录>`；该工具只读取结果文件。
+
+### 14.4 验收脚本与作业的用途
+
+验收脚本检查代码是否正确完成指定计算，检查结果用于发现尺寸、数值、梯度、内存及保存加载问题。正式训练结果用于评价模型的检索效果，两者分别记录。
+
+`ME CVDisaster/validate.py` 使用真实 CVIAN 图片和已有 CVUSA 初始权重，检查训练 batch 64、评价 batch 128、两张 A100、独立单视角预测、矩阵和特征顺序、均值关系、向量范数、融合公式、最终向量损失、各模块梯度及候选缓存。它会针对配置中列出的每种模型完成一次参数更新，随后执行完整测试集评估、保存和加载检查，输出验收 JSON 与验收权重。当前默认配置包含 baseline 和改进模型，因此调用该入口会检查这两种模型，并分别更新一次参数。
+
+`CVDISASTER_MODE=validate` 会通过同一 Slurm 脚本申请计算节点并执行 `validate.py`。这是独立的计算作业，需要 GPU 资源，其输出权重和成绩只用于检查计算。本次运行安排未包含该独立作业，验收权重不作为本次正式训练的初始权重。
+
+`ME CVDisaster/geolocalization/author_validation.py` 使用同一个基线 checkpoint，调用作者的 `predict`、`calculate_scores`，与当前评价流程比较完整测试集的 ID 顺序、实际 dtype、相似度、逐查询排名和四项 Recall。它只执行评估，目的在于确认与已完成 geo 结果使用相同的指标定义和计算方式。数值要求见第 11 节；检查失败时保存诊断并终止。
+
+第 11 节列出的检查项目描述需要核验的计算内容；实际执行过的检查、作业编号和结果分别记录。当前代码修改阶段没有执行这些 GPU 脚本。

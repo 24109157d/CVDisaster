@@ -31,6 +31,10 @@ def read_config(path):
     config = json.loads(Path(path).read_text(encoding="utf-8"))
     if config["backbone"] != "convnext_base.fb_in22k_ft_in1k_384":
         raise ValueError("实验 backbone 与方案不符")
+    if (config["training_architecture"], config["seed"]) != ("geo_cvft_refine", 42):
+        raise ValueError("本次正式训练固定为 geo_cvft_refine、seed=42")
+    if config["baseline_reference"]["job_id"] != "3979539" or config["baseline_reference"]["seed"] != 42:
+        raise ValueError("本次比较必须使用已完成作业 3979539 的 seed=42 基线")
     if (config["batch_size"], config["batch_size_eval"], config["epochs"]) != (64, 128, 10):
         raise ValueError("正式输入 batch 和训练轮数与方案不符")
     if (config["loss_input"], config["fusion_logit_init"], config["normalization_eps"],

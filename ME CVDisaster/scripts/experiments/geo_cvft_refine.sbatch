@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:2
 #SBATCH --mem=60000M
-#SBATCH --time=7-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --job-name=cvdisaster-geo-cvft
 #SBATCH --output=/scratch/liuzeyu/heyinxi/logs/geo-cvft-%j.log
 
@@ -37,8 +37,8 @@ case "$MODE" in
     train)
         ARCHITECTURE=${CVDISASTER_ARCHITECTURE:?必须指定模型名称}
         SEED=${CVDISASTER_SEED:?必须指定训练 seed}
-        case "$ARCHITECTURE" in baseline|geo_cvft_refine) ;; *) exit 2 ;; esac
-        case "$SEED" in 42|43|44) ;; *) exit 2 ;; esac
+        case "$ARCHITECTURE" in geo_cvft_refine) ;; *) exit 2 ;; esac
+        case "$SEED" in 42) ;; *) exit 2 ;; esac
         RUN=/scratch/liuzeyu/heyinxi/runs/${ARCHITECTURE}-seed${SEED}-${SLURM_JOB_ID}
         ;;
     evaluate)

@@ -548,7 +548,7 @@ cd /scratch/liuzeyu/heyinxi/CVDisaster
 export CVDISASTER_COMMIT=$(git rev-parse HEAD)
 
 # 改进模型正式训练一次，seed=42。
-sbatch --export=ALL,CVDISASTER_MODE=train,CVDISASTER_ARCHITECTURE=geo_cvft_refine,CVDISASTER_SEED=42 "ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch"
+bash "ME CVDisaster/scripts/experiments/submit_geo_cvft.sh"
 ```
 
 同一个训练任务执行以下计算：训练前评价一次初始改进模型并生成难负候选；训练 10 个 epoch，每轮结束后评价；训练结束后重新加载 best 计算完整指标。随后读取作业 `3979539` 的已有 best checkpoint，执行当前与作者的评价流程，保存逐查询结果并计算比较统计。已有基线在该过程中的参数更新次数为零。
@@ -557,7 +557,9 @@ sbatch --export=ALL,CVDISASTER_MODE=train,CVDISASTER_ARCHITECTURE=geo_cvft_refin
 
 ```bash
 export CVDISASTER_CHECKPOINT=/scratch/liuzeyu/heyinxi/runs/geo_cvft_refine-seed42-<JobID>/output/best.pth
-sbatch --export=ALL,CVDISASTER_MODE=evaluate "ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch"
+export CVDISASTER_MODE=evaluate
+unset SBATCH_GET_USER_ENV SLURM_GET_USER_ENV SBATCH_EXPORT SLURM_EXPORT_ENV
+sbatch --export=ALL "ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch"
 ```
 
 本次结果比较按照第 10.3 节，直接使用作业 `3979539` 的已有结果和本次改进模型结果。训练任务会自动生成比较文件。需要使用已有逐查询记录重新计算比较统计时，调用 `compare.py --run <改进模型output目录> --baseline-queries <基线best_queries.csv> --output <仓库外的新目录>`；该工具只读取结果文件。

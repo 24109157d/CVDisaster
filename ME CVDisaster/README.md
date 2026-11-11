@@ -10,6 +10,7 @@
 
 - `scripts/reproduction/`：复现作者实验的脚本和检查脚本。
 - `scripts/experiments/`：后续改进实验的运行脚本。
+- `scripts/experiments/submit_geo_cvft.sh`：通过当前进程环境传递参数，提交一个 seed=42 的正式训练作业。
 - `configs/`：实验配置和参数记录。
 - `docs/`：本目录专属的实验方案和实验记录。
 - `geolocalization/`：模型、损失、数据接口、训练与评价代码。

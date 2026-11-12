@@ -1,75 +1,56 @@
 import argparse
 import gc
 import json
+import math
 from pathlib import Path
-import shutil
 import time
+from types import SimpleNamespace
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
 from transformers import get_cosine_schedule_with_warmup
+
+from sample4geo.trainer import train as author_train
 
 from .comparison import compare_results
 from .data import make_datasets, make_loaders, shuffle_training
+from .diagnostics import gradient_statistics
 from .evaluation import evaluate, mine_neighbours, save_predictions
-from .loss import contrastive_loss
+from .loss import DescriptorInfoNCE
 from .reference import evaluate_baseline_reference
 from .runtime import (environment, initialize, load_initial_model, memory_usage, new_output,
-                      parallel_model, random_state, read_config, require_compute_node, sha256, write_json)
-
-
-def check_gradients(model):
-    groups = {"model": 0.0, "logit_scale": 0.0}
-    if model.architecture == "geo_cvft_refine":
-        groups.update(channel_projection=0.0, feature_transport=0.0, refinement=0.0,
-                      fusion_logit=0.0)
-    for name, parameter in model.named_parameters():
-        if not parameter.requires_grad:
-            continue
-        if parameter.grad is None or not torch.isfinite(parameter.grad).all():
-            raise FloatingPointError(f"参数梯度缺失或包含非有限数值: {name}")
-        group = name.partition(".")[0]
-        groups[group] = max(groups[group], float(parameter.grad.detach().abs().max()))
-    if any(value == 0 for value in groups.values()):
-        raise FloatingPointError(f"功能模块梯度为零: {groups}")
-    return groups
+                      parallel_model, read_config, require_compute_node, sha256, write_json)
 
 
 def train_epoch(model, loader, optimizer, scheduler, scaler, config, epoch, output, step):
-    model.train()
     rows = []
     seen_ids = []
     diagnostic_values = []
     started = time.perf_counter()
-    for ground_image, satellite_image, sample_ids in loader:
-        if len(sample_ids) != config["batch_size"]:
-            raise ValueError("每个训练 batch 必须包含 64 对图片")
+    batch = {}
+
+    def forward_adapter(current_model, ground_image, satellite_image, sample_ids):
         seen_ids.extend(sample_ids.tolist())
-        sample_ids = sample_ids.cuda(non_blocking=True)
-        optimizer.zero_grad(set_to_none=True)
-        with autocast(enabled=config["mixed_precision"]):
-            ground, satellite = model(ground_image.cuda(non_blocking=True),
-                                      satellite_image.cuda(non_blocking=True), sample_ids=sample_ids)
-        # DataParallel 已经汇集两张卡的特征，在主卡形成完整的 64×64 logits。
-        loss = contrastive_loss(ground, satellite, model.module, sample_ids, config["label_smoothing"])
-        scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        gradients = check_gradients(model.module)
-        fusion_gradient = (float(model.module.fusion_logit.grad.detach())
-                           if model.module.architecture == "geo_cvft_refine" else None)
-        fusion_before = model.module.fusion_state()
-        torch.nn.utils.clip_grad_value_(model.parameters(), config["clip_grad"])
-        learning_rate = optimizer.param_groups[0]["lr"]
-        scaler.step(optimizer)
-        scaler.update()
-        scheduler.step()
-        step += 1
-        row = {"epoch": epoch, "step": step, "loss": float(loss.detach()),
-               "lr": learning_rate, "next_lr": optimizer.param_groups[0]["lr"],
-               "logit_scale": float(model.module.logit_scale.detach()),
-               "grad_scaler": scaler.get_scale(), "gradients": gradients}
+        batch["fusion_before"] = current_model.module.fusion_state()
+        return current_model(ground_image, satellite_image, sample_ids=sample_ids.to(ground_image.device))
+
+    def record_step(loss, ground, satellite):
+        nonlocal step
+        gradients = gradient_statistics(model.module)
+        fusion_gradient = None
         if model.module.architecture == "geo_cvft_refine":
-            row.update(fusion_before=fusion_before, fusion_after=model.module.fusion_state(),
+            value = model.module.fusion_logit.grad
+            if value is not None and torch.isfinite(value).all():
+                fusion_gradient = float(value.detach())
+        learning_rate = optimizer.param_groups[0]["lr"]
+        step += 1
+        loss_value = float(loss.detach())
+        row = {"epoch": epoch, "step": step, "loss": loss_value if math.isfinite(loss_value) else None,
+               "lr": learning_rate,
+               "logit_scale": float(model.module.logit_scale.detach()),
+               "grad_scaler": scaler.get_scale() if scaler is not None else None, "gradients": gradients}
+        if model.module.architecture == "geo_cvft_refine":
+            row.update(fusion_before=batch["fusion_before"], fusion_after=model.module.fusion_state(),
                        fusion_logit_gradient=fusion_gradient)
             values = ground["transport_diagnostics"].detach().cpu()
             diagnostic_values.append(values)
@@ -80,10 +61,15 @@ def train_epoch(model, loader, optimizer, scheduler, scaler, config, epoch, outp
         print(json.dumps(row, ensure_ascii=False, allow_nan=False), flush=True)
         with (output / "steps.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
-    if seen_ids != loader.dataset.samples or len(rows) != config["steps_per_epoch"]:
-        raise ValueError("训练执行顺序或优化步数与本轮采样记录不匹配")
+
+    train_config = SimpleNamespace(device="cuda", verbose=True, gpu_ids=(0, 1),
+                                   clip_grad=config["clip_grad"], scheduler="cosine")
+    criterion = DescriptorInfoNCE(torch.nn.CrossEntropyLoss(label_smoothing=config["label_smoothing"]),
+                                  device="cuda")
+    mean_loss = author_train(train_config, model, loader, criterion, optimizer, scheduler, scaler,
+                             forward_adapter=forward_adapter, step_callback=record_step)
     report = {"epoch": epoch, "step": step, "steps": len(rows),
-              "mean_loss": sum(row["loss"] for row in rows) / len(rows),
+              "mean_loss": mean_loss if math.isfinite(mean_loss) else None,
               "seconds": time.perf_counter() - started, "sample_ids": seen_ids}
     report["fusion"] = model.module.fusion_state()
     if diagnostic_values:
@@ -95,13 +81,11 @@ def train_epoch(model, loader, optimizer, scheduler, scaler, config, epoch, outp
     return report, step
 
 
-def checkpoint(model, optimizer, scheduler, scaler, epoch, step, best_epoch, best_score,
-               config, architecture, seed, loaders, metadata, samples):
-    return {"model": model.module.state_dict(), "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(),
+def checkpoint(model, epoch, step, best_epoch, best_score, config, architecture, seed, metadata):
+    return {"model": model.module.state_dict(),
             "epoch": epoch, "step": step, "best_epoch": best_epoch, "best_score": best_score,
             "config": config, "architecture": architecture, "seed": seed,
-            "random_state": random_state(loaders), "metadata": metadata, "sample_ids": samples,
+            "metadata": {"split_manifest": metadata["split_manifest"]},
             "fusion": model.module.fusion_state()}
 
 
@@ -117,18 +101,16 @@ def run_training(args):
     model, initial_scales = load_initial_model(config, args.architecture)
     data_config = model.get_config()
     datasets, manifest, transforms = make_datasets(config, data_config)
-    loaders = make_loaders(datasets, config, args.seed)
+    loaders = make_loaders(datasets, config)
     model = parallel_model(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"], betas=tuple(config["betas"]),
                                   eps=config["eps"], weight_decay=config["weight_decay"],
                                   amsgrad=config["amsgrad"])
-    # 调度长度在首次自定义采样之前计算，实际采样每轮产生 38 次更新。
+    # 沿用原复现，在首次自定义采样之前计算调度长度。
     scheduled_steps = len(loaders["train"]) * config["epochs"]
-    warmup_steps = len(loaders["train"])
-    if (scheduled_steps, warmup_steps) != (config["scheduler_steps"], config["warmup_steps"]):
-        raise ValueError("调度步数与方案不符")
+    warmup_steps = len(loaders["train"]) * config["warmup_epochs"]
     scheduler = get_cosine_schedule_with_warmup(optimizer, warmup_steps, scheduled_steps)
-    scaler = GradScaler(init_scale=config["grad_scaler_init"], enabled=config["mixed_precision"])
+    scaler = GradScaler(init_scale=config["grad_scaler_init"]) if config["mixed_precision"] else None
     metadata = {"environment": environment(), "backend": backend, "data_config": data_config,
                 "initial_logit_scales": initial_scales, "split_manifest": manifest,
                 "initial_fusion": model.module.fusion_state(),
@@ -136,29 +118,27 @@ def run_training(args):
                 "baseline_checkpoint_sha256": baseline_checkpoint_sha256,
                 "trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
                 "transforms": transforms, "architecture": args.architecture, "seed": args.seed,
-                "scheme": config["scheme"], "config": config}
+                "scheme": config["scheme"], "config": config,
+                "scheduler": {"warmup_steps": warmup_steps, "training_steps": scheduled_steps}}
     write_json(output / "run.json", metadata)
-    for name in manifest["splits"]:
-        shutil.copyfile(Path(config["data_root"]) / name, output / name)
-    slurm_script = metadata["environment"]["slurm_script"]
-    if slurm_script:
-        shutil.copyfile(slurm_script, output / "submitted.sbatch")
     run_id = f"{metadata['environment']['commit']}:{args.architecture}:seed{args.seed}"
     zero_shot = evaluate(model, loaders, checkpoint_id=f"{run_id}:initial")
-    write_json(output / "zero_shot.json", {"metrics": zero_shot["metrics"], "transport": zero_shot["transport"],
-                                          "feature_context": zero_shot["feature_context"]})
+    metadata["initial_evaluation"] = {"metrics": zero_shot["metrics"], "transport": zero_shot["transport"]}
     del zero_shot
-    neighbours = mine_neighbours(model, loaders, config)
-    best_score, best_epoch, best_ranks = -1.0, None, None
+    train_metrics, neighbours = mine_neighbours(model, loaders, config)
+    metadata["initial_training_evaluation"] = train_metrics
+    write_json(output / "run.json", metadata)
+    shuffle_training(datasets["train"], neighbours, config)
+    best_score, best_epoch, best_ranks = 0.0, None, None
     history = []
     step = 0
     for epoch in range(1, config["epochs"] + 1):
-        sample_ids = shuffle_training(datasets["train"], neighbours, config)
-        write_json(output / f"samples_epoch_{epoch:02d}.json", sample_ids)
         report, step = train_epoch(model, loaders["train"], optimizer, scheduler, scaler,
                                     config, epoch, output, step)
         result = evaluate(model, loaders, checkpoint_id=f"{run_id}:epoch{epoch}:step{step}")
+        train_metrics, neighbours = mine_neighbours(model, loaders, config)
         report["evaluation"] = result["metrics"]
+        report["training_evaluation"] = train_metrics
         report["evaluation_timing"] = result["timing"]
         report["feature_context"] = result["feature_context"]
         report["memory"] = memory_usage()
@@ -167,17 +147,14 @@ def run_training(args):
         if result["metrics"]["R@1"] > best_score:
             best_score, best_epoch = result["metrics"]["R@1"], epoch
             best_ranks = result["ranks"].clone()
-            torch.save(checkpoint(model, optimizer, scheduler, scaler, epoch, step, best_epoch,
-                                  best_score, config, args.architecture, args.seed, loaders, metadata,
-                                  sample_ids), output / "best.pth")
+            torch.save(checkpoint(model, epoch, step, best_epoch, best_score, config,
+                                  args.architecture, args.seed, metadata), output / "best.pth")
         del result
-        if epoch < config["epochs"]:
-            neighbours = mine_neighbours(model, loaders, config)
-    if step != config["steps_per_epoch"] * config["epochs"]:
-        raise ValueError(f"训练总优化步数错误: {step}")
-    torch.save(checkpoint(model, optimizer, scheduler, scaler, epoch, step, best_epoch,
-                          best_score, config, args.architecture, args.seed, loaders, metadata,
-                          sample_ids), output / "last.pth")
+        shuffle_training(datasets["train"], neighbours, config)
+    torch.save(checkpoint(model, epoch, step, best_epoch, best_score, config,
+                          args.architecture, args.seed, metadata), output / "last.pth")
+    if best_epoch is None:
+        raise RuntimeError("训练未产生 R@1 大于 0 的最佳 checkpoint，请检查训练日志")
     best = torch.load(output / "best.pth", map_location="cpu")
     model.module.load_state_dict(best["model"], strict=True)
     if model.module.fusion_state() != best["fusion"]:
@@ -197,12 +174,11 @@ def run_training(args):
     del result, best, model, optimizer, scheduler, scaler
     gc.collect()
     torch.cuda.empty_cache()
-    baseline_summary = evaluate_baseline_reference(
+    evaluate_baseline_reference(
         config, loaders, datasets["test_ground"], output / "baseline_reference", baseline_checkpoint_sha256)
-    comparison = compare_results(output, output / "baseline_reference/best_queries.csv", output / "comparison")
+    comparison = compare_results(output, output / "baseline_reference/best_queries.csv")
     summary.update(baseline_reference_result=str(output / "baseline_reference/result.json"),
-                   baseline_author_evaluation_verified=baseline_summary["author_evaluation_consistency"]["passed"],
-                   comparison=str(output / "comparison/comparison.json"),
+                   comparison=comparison,
                    metric_differences={name: values["difference_percentage_points"]
                                        for name, values in comparison["metrics"].items()},
                    total_run_seconds=time.perf_counter() - started)

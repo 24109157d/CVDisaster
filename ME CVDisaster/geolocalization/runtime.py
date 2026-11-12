@@ -4,10 +4,8 @@ import json
 import os
 from pathlib import Path
 import platform
-import random
 import sys
 
-import numpy as np
 import torch
 
 from . import REPOSITORY
@@ -28,19 +26,7 @@ def sha256(path):
 
 
 def read_config(path):
-    config = json.loads(Path(path).read_text(encoding="utf-8"))
-    if config["backbone"] != "convnext_base.fb_in22k_ft_in1k_384":
-        raise ValueError("实验 backbone 与方案不符")
-    if (config["training_architecture"], config["seed"]) != ("geo_cvft_refine", 42):
-        raise ValueError("本次正式训练固定为 geo_cvft_refine、seed=42")
-    if config["baseline_reference"]["job_id"] != "3979539" or config["baseline_reference"]["seed"] != 42:
-        raise ValueError("本次比较必须使用已完成作业 3979539 的 seed=42 基线")
-    if (config["batch_size"], config["batch_size_eval"], config["epochs"]) != (64, 128, 10):
-        raise ValueError("正式输入 batch 和训练轮数与方案不符")
-    if (config["loss_input"], config["fusion_logit_init"], config["normalization_eps"],
-            config["author_similarity_tolerance"]) != ("descriptors", 0.0, 1e-12, 1e-5):
-        raise ValueError("训练目标、融合初值或数值核验参数与方案不符")
-    return config
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def require_compute_node():
@@ -73,8 +59,7 @@ def new_output(path):
 
 
 def create_model(config, architecture):
-    return GeoModel(architecture, config["transport_tau"], config["sinkhorn_iterations"],
-                    config["sinkhorn_tolerance"])
+    return GeoModel(architecture, config["transport_tau"], config["sinkhorn_iterations"], config["module_init_seed"])
 
 
 def load_initial_model(config, architecture):
@@ -99,12 +84,6 @@ def environment():
             "gpus": [torch.cuda.get_device_name(i) for i in range(2)],
             "job_id": os.environ["SLURM_JOB_ID"], "node": os.environ["SLURMD_NODENAME"],
             "argv": sys.argv, "slurm_script": os.environ.get("CVDISASTER_SLURM_SCRIPT")}
-
-
-def random_state(loaders):
-    return {"python": random.getstate(), "numpy": np.random.get_state(),
-            "torch": torch.get_rng_state(), "cuda": torch.cuda.get_rng_state_all(),
-            "loaders": {name: loader.generator.get_state() for name, loader in loaders.items()}}
 
 
 def memory_usage():

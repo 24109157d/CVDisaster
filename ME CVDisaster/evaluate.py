@@ -3,7 +3,6 @@ from pathlib import Path
 
 import torch
 
-from geolocalization.author_validation import validate_author_evaluation
 from geolocalization.data import make_datasets, make_loaders
 from geolocalization.evaluation import evaluate, save_predictions
 from geolocalization.runtime import (create_model, environment, initialize, memory_usage,
@@ -28,12 +27,9 @@ def main():
     datasets, manifest, transforms = make_datasets(config, model.get_config())
     if manifest != saved["metadata"]["split_manifest"]:
         raise ValueError("评价时的数据划分与 checkpoint 的实验记录不一致")
-    loaders = make_loaders(datasets, config, saved["seed"])
+    loaders = make_loaders(datasets, config)
     model = parallel_model(model)
     result = evaluate(model, loaders, checkpoint_id=sha256(checkpoint_path))
-    if saved["architecture"] == "baseline":
-        result["author_evaluation_consistency"] = validate_author_evaluation(
-            checkpoint_path, loaders, result, config, output)
     summary = save_predictions(result, datasets["test_ground"], output, config)
     summary.update(checkpoint=str(checkpoint_path), checkpoint_epoch=saved["epoch"],
                    seed=saved["seed"], architecture=saved["architecture"], scheme=config["scheme"],

@@ -64,7 +64,7 @@ def calc_sim(config,
 
 
 
-def calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=1000, ranks=[1,5,10]):
+def calculate_scores(query_features, reference_features, query_labels, reference_labels, step_size=1000, ranks=[1,5,10], return_details=False):
 
     topk = copy.deepcopy(ranks)
     Q = len(query_features)
@@ -100,6 +100,7 @@ def calculate_scores(query_features, reference_features, query_labels, reference
     topk.append(R//100)
     
     results = np.zeros([len(topk)])
+    query_ranks = []
     
     
     bar = tqdm(range(Q))
@@ -114,6 +115,8 @@ def calculate_scores(query_features, reference_features, query_labels, reference
         
          
         ranking = higher_sim.sum()
+        if return_details:
+            query_ranks.append(int(ranking))
         for j, k in enumerate(topk):
             if ranking < k:
                 results[j] += 1.
@@ -136,6 +139,11 @@ def calculate_scores(query_features, reference_features, query_labels, reference
         
     print(' - '.join(string)) 
 
+    if return_details:
+        metrics = {f"R@{rank}": float(results[index]) for index, rank in enumerate(ranks)}
+        metrics["R@1%"] = float(results[-1])
+        return {"metrics": metrics, "ranks": torch.tensor(query_ranks, dtype=torch.long),
+                "scores": similarity}
     return results[0]
     
 

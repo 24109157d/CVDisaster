@@ -146,23 +146,25 @@ S\in\mathbb{R}^{B\times64\times64}.
 矩阵生成模块只接收街景的 64 通道、4×16 空间特征：
 
 1. 使用 `Conv2d(64,1,kernel_size=1,bias=True)` 压缩通道。
-2. 使用 GELU。
+2. 使用 ReLU。
 3. 按街景源位置顺序展开为 `[B,64]`。
 4. 使用 `Linear(64,4096,bias=True)` 生成矩阵数值。
 5. reshape 为代价矩阵 `C(g)`，形状为 `[B,64,64]`。
 
 矩阵的行对应街景源位置，列对应目标网格位置。每幅街景独立生成自己的矩阵；同一矩阵应用于该图像的全部 64 个通道。
 
-新增 Conv 和 Linear 使用 Xavier uniform 初始化，bias 初始化为零。原预训练模型的 backbone 和全局 head 参数按 checkpoint 原值加载。
+初始化参考 CVFT 的 `script/ot_net.py`。共享通道投影和通道压缩 Conv 的 weight 使用 Xavier uniform；bias 也采用一维 Xavier uniform，输出通道数为 `n` 时使用区间 `[-sqrt(3/n),sqrt(3/n)]`。矩阵生成 Linear 的 weight 使用均值 0、标准差参数 0.005 的截断正态分布，截断区间为 `[-0.01,0.01]`；bias 为按行展开的 `I_64`。这个单位矩阵仅定义代价值的初始参数，经过负号、行列归一化后生成实际传输矩阵；源网格与目标网格的相同展开序号不代表已知的地理对应关系。原预训练模型的 backbone 和全局 head 参数按 checkpoint 原值加载。
 
 ### 5.2 Sinkhorn 计算
 
 主配置固定：
 
 - 温度 `transport_tau=1.0`。
-- 行列归一化迭代次数 `sinkhorn_iterations=20`。
+- 行列归一化迭代次数固定为 `sinkhorn_iterations=30`，训练和评估使用相同次数。
 - 计算 dtype 为 FP32；在 AMP 训练中，该模块显式使用 FP32。
 - 在对数域计算，初值 `log_P=-C(g)/transport_tau`。
+
+CVFT 原作者使用 `log_P=-100*C(g)` 和默认 20 次迭代。本实验使用已确认的 `transport_tau=1.0` 和固定 30 次，代价值的缩放属于本实验配置，按该配置记录数值范围和检索结果。
 
 每次迭代依次执行：
 
@@ -186,7 +188,7 @@ e_{row}=\max_i\left|\sum_jP_{ij}-1\right|,
 e_{col}=\max_j\left|\sum_iP_{ij}-1\right|.
 \]
 
-容许误差固定为 `1e-3`。出现非有限值或误差超过阈值时就地报错，输出样本 ID、代价范围、行列误差及温度。迭代次数与温度的更改需要更新配置和方案，正式运行不自动改变计算规则。
+行列和误差仅作为诊断数据记录，不设置误差阈值，不根据误差大小提前结束迭代或终止训练。每次前向固定执行 30 次行列归一化。代价矩阵、传输矩阵或行列和误差出现非有限值，以及传输矩阵出现负值时，就地报错，输出样本 ID、代价范围、行列误差及温度。迭代次数与温度的更改需要更新配置和方案，正式运行不自动改变计算规则。固定 30 次属于近似计算，不保证行列和达到某个指定精度，其数值误差和检索效果通过实验记录评价。
 
 ### 5.3 特征搬移
 
@@ -229,18 +231,22 @@ H(P)=-\frac1{64}\sum_i\sum_jP_{ij}\log(P_{ij}+10^{-12}).
 修正模块接收搬移后的街景特征 `X`，形状为 `[B,64,8,8]`，输出同形状 tensor：
 
 \[
-R(X)=X+\operatorname{Conv}_{3\times3}^{(2)}
-\left(\operatorname{GELU}\left(
-\operatorname{Conv}_{3\times3}^{(1)}(\operatorname{LN}_{channel}(X))
-\right)\right).
+Y_1=\operatorname{ReLU}\left(\operatorname{IN}_1
+\left(\operatorname{Conv}_{3\times3}^{(1)}(X)\right)\right),
+\qquad
+Y_2=\operatorname{ReLU}\left(\operatorname{IN}_2
+\left(\operatorname{Conv}_{3\times3}^{(2)}(Y_1)\right)\right),
+\qquad R(X)=\operatorname{ReLU}(X+Y_2).
 \]
 
 模块参数固定为：
 
-- LayerNorm 对每个空间位置的 64 个通道计算，`eps=1e-6`，使用可学习的 scale 和 bias。
+- 每次卷积后使用 InstanceNorm2d，对每个样本的每个通道按 8×8 空间范围归一化，`eps=1e-5`、`affine=False`、`track_running_stats=False`，训练与评价均使用当前输入的统计量。
 - 两个 Conv 均为 64 输入通道、64 输出通道、kernel size 3、stride 1、padding 1、`bias=True`。
-- 中间激活为 GELU，第二个 Conv 后直接与输入相加。
-- Conv 使用 Xavier uniform，bias 为零；LayerNorm scale 为 1、bias 为零。
+- 每个 Conv 后依次执行 InstanceNorm 和 ReLU，残差相加后再次执行 ReLU。
+- Conv weight 使用 Kaiming normal，`mode=fan_out`、`nonlinearity=relu`；Conv bias 保留 PyTorch Conv2d 的默认初始化，与 DenseFlow 原修正网络的初始化方式一致。
+
+该计算顺序参考 DenseFlow 的 `gen_BEV/VGG.py::ResidualBlock`。`op_flow/raft.py` 使用 `RefineNet(norm_fn='instance')`，`RefineNet` 对卷积执行上述 Kaiming 初始化。本实验将其中一个等尺寸残差单元用于 64 通道、8×8 特征，模块深度和通道数按当前检索结构设置。
 
 该模块只作用于经过搬移的街景特征。卫星空间特征采用共享通道投影和 8×8 聚合后的输出。
 
@@ -296,7 +302,7 @@ s(g,s)=z_g^\top z_s
 
 FP32 中通过 `exp(0.5*logsigmoid(a))` 与 `exp(0.5*logsigmoid(-a))` 计算两个缩放系数，保持数值计算与上述公式一致。融合参数使用与其他可训练参数相同的 optimizer 和参数衰减规则。记录 `a`、`alpha` 及其梯度，检查非有限值。
 
-最终向量沿特征维度再次 L2 归一化，消除浮点计算中的范数误差；InfoNCE 和评估使用这一输出。归一化前后的向量及初始化比例均纳入数值核验。5,120 维 float32 向量组成的 1,649 张卫星候选库约占 32.2 MiB，此值只表示向量数据本身的存储量。
+网络输出两个分支按平方根系数缩放后的拼接向量。训练时由原复现的 InfoNCE 执行最终 L2 归一化，评价时由原复现的 predict 执行最终 L2 归一化，保持各入口原有的归一化和 AMP 执行顺序。baseline 接口直接提供原有全局 head 输出。5,120 维 float32 向量组成的 1,649 张卫星候选库约占 32.2 MiB，此值只表示向量数据本身的存储量。
 
 ### 7.3 训练接口
 
@@ -308,19 +314,21 @@ FP32 中通过 `exp(0.5*logsigmoid(a))` 与 `exp(0.5*logsigmoid(-a))` 计算两�
 - `transport`：街景 `[B,64,64]`，用于搬移和诊断。
 - `fusion_weight`：模型共用的标量 `alpha`，用于记录融合比例。
 
-图片 ID 用于核验配对和 batch 唯一性，不作为模型的图像特征输入。
+图片 ID 用于配对、预测结果关联和模块诊断，不作为模型的图像特征输入。
 
 ### 7.4 单幅图像预测接口
 
 预测显式指定视角 `ground` 或 `satellite`。街景执行矩阵生成、搬移和修正，卫星执行通道投影及目标网格聚合。每幅图像独立输出一个 `[5120]` 检索向量。
 
-测试时对 1,649 张卫星图像预先计算向量，街景向量与整个候选库计算相似度并排序。街景和卫星特征必须由同一 checkpoint 产生，使用其中同一个 `alpha`。候选缓存记录 checkpoint 标识与 `alpha`，重新加载其他 checkpoint 时重新生成对应缓存。
+测试时对 1,649 张卫星图像预先计算向量，街景向量与整个候选库计算相似度并排序。街景和卫星特征由同一 checkpoint 产生，使用其中同一个 `alpha`。每次评价重新计算向量，并记录 checkpoint 标识与 `alpha`。
 
-输出 Top-K 卫星 ID、经纬度、最终相似度、两个分支各自的相似度及融合比例。原始图片路径同时保留，供后续 est 实验关联。
+逐查询文件记录 Top-K 卫星 ID 和最终相似度、正确候选及 Top-1 候选的分支相似度，融合比例记录在结果 JSON 中。原始图片路径同时保留，供后续实验关联。
 
 ## 8 训练损失与温度参数
 
-沿用原作者双向 InfoNCE 的计算方式，输入为第 7 节输出的最终融合向量。对于全局 batch `B=64`，令：
+直接调用原复现的 `sample4geo.loss.InfoNCE`。适配类 `DescriptorInfoNCE` 只从模型输出字典中取出 `descriptors`，归一化、logit scale 的乘法顺序、矩阵乘法和双向 cross entropy 均由原函数执行。原复现的 `sample4geo.trainer.train` 在同一 autocast 范围内执行模型前向和损失计算，再依次执行 backward、unscale、梯度裁剪、GradScaler 更新、清理梯度及 scheduler 更新。新增模块的前向适配和记录回调不改变上述计算顺序。
+
+对于全局 batch `B=64`，将传入 InfoNCE 的向量按其原有代码归一化后，令：
 
 \[
 Z_g,Z_s\in\mathbb{R}^{B\times5120},\qquad
@@ -363,7 +371,7 @@ L=\tfrac12\left[
 - 初始 CVUSA 权重：`/scratch/liuzeyu/heyinxi/pretrained/weights_e40_98.6830.pth`。
 - 权重 SHA256：`739cf00d303836fba1195f1bb8d54c4b13c53926ce3212fc9ceced335fc59a23`。
 
-组合模型使用与已完成 geo 复现相同的初始 CVUSA checkpoint，逐项加载原有 backbone、全局 head 和 `logit_scale`；新增模块按本方案初始化，`fusion_logit` 初始化为零。检查缺失项和多余项，所有与原结构对应的参数必须完整加载。
+组合模型使用与已完成 geo 复现相同的初始 CVUSA checkpoint，沿用 `load_state_dict(..., strict=False)` 加载原有 backbone、全局 head 和 `logit_scale`；新增模块按本方案初始化，`fusion_logit` 初始化为零。运行环境使用已有本地权重创建模型，保持离线运行。
 
 ### 9.2 优化参数
 
@@ -375,11 +383,12 @@ L=\tfrac12\left[
 - 学习率：`5e-4`，backbone 和新增模块使用相同基础学习率。
 - AdamW betas：`(0.9,0.999)`，eps：`1e-8`，weight decay：`0.01`，amsgrad：`False`。
 - 参数衰减采用当前代码规则，不额外排除特定参数。
-- AMP：启用；GradScaler 初始 scale 为 `2**10`。
+- AMP：沿用原复现的 autocast 范围与算子精度选择；GradScaler 初始 scale 为 `2**10`。InfoNCE 直接在原 train 函数的 autocast 范围内执行。Sinkhorn 及组合向量内部的 FP32 计算属于新增模块的适配。
 - 组合模型训练目标：最终融合向量的双向 InfoNCE；融合比例通过训练集反向传播学习。
 - `fusion_logit` 初值为 0；其参数更新使用同一基础学习率与 weight decay。
 - 梯度处理：AMP unscale 后，沿用逐元素梯度裁剪 `clip_grad_value_=100`。
-- scheduler：cosine，预热长度 39 个优化步，总长度 390 个优化步。
+- 正式训练的梯度缺失、零值和非有限值仅记录，不增加梯度终止条件。非有限梯度由 GradScaler 按原复现流程处理；记录回调在参数更新后、清理梯度前收集裁剪后的梯度幅度、缺失参数名称和非有限梯度参数名称。
+- scheduler：cosine，`warmup_epochs=1`，按原复现首次采样前的 DataLoader 长度计算预热步数和总调度步数。
 - DataLoader workers：4。
 - 本次正式训练独立初始化并保存输出，不自动续训。
 
@@ -387,17 +396,21 @@ L=\tfrac12\left[
 
 沿用当前训练集自定义采样，`custom_sampling=True`、`sim_sample=True`、`gps_sample=False`、`neighbour_select=64`、`neighbour_range=128`。
 
-调度步数在第一次自定义采样之前确定。2,472 对数据和 batch 64 对应 39 批，因此预热 39 步、总调度 390 步。
+调度步数在第一次自定义采样之前确定：`warmup_steps=len(train_loader)*warmup_epochs`，`training_steps=len(train_loader)*epochs`。当前 2,472 对数据和 batch 64 对应 39 批，因此计算出的预热长度为 39 步、总调度长度为 390 步，实际计算值写入 `run.json`。
 
-当前采样方式每轮保留 2,432 对，形成 38 个完整 batch，实际训练共 380 个优化步。每轮剩余的 40 对由当轮采样规则确定。按实际顺序逐步调用 scheduler，记录每轮样本清单、优化步数和学习率。末轮按实际第 380 步所在位置结束。
+每轮直接使用原 `Dataset.shuffle` 返回的样本顺序和数量，DataLoader 按实际长度执行训练，逐步调用 scheduler。记录实际样本清单、batch 数量、优化步数和学习率，训练按配置完成 10 个 epoch。
 
-组合模型使用当前最终 5,120 维向量更新训练集难负候选，采样规则沿用已完成 geo 复现。模型产生的实际难负候选可能不同，记录每轮样本清单。该规则对应对完整检索系统的比较。
+沿用原复现顺序：训练前先评价测试集，再提取训练集特征、计算训练集 Recall 和难负候选，然后执行首次 shuffle；每轮训练结束后依次评价测试集、计算训练集 Recall 和难负候选、选择 best，再执行 shuffle，包含最后一轮。训练集 Recall 调用原 `calculate_scores`，难负候选调用原 `calculate_nearest`。特征和样本 ID 保留在 GPU，使用原有 GPU 矩阵乘法计算分数，再沿用原函数的 CPU 排序与候选筛选。模型产生的实际难负候选可能不同，每轮样本顺序统一记录在 `history.json` 中。
 
 ### 9.4 随机种子
 
 数据划分和本次训练均只使用 seed=42。改进模型正式训练次数为一次，训练轮数为 10。
 
-固定 Python、NumPy、PyTorch、CUDA 及 DataLoader 的随机生成来源，并记录 GPU、CUDA、cuDNN 和实际后端设置。保留已完成 geo 复现的后端运行方式；seed 不能保证所有 GPU 算子逐位一致。
+沿用已完成 geo 复现的 `setup_system(seed=42)`，设置 Python、NumPy、PyTorch 和 CUDA 的全局随机种子。DataLoader 沿用原复现的构造参数和默认 worker 随机初始化，不额外传入 `generator` 或 `worker_init_fn`。运行记录保存 seed、GPU、CUDA、cuDNN 和实际后端设置。
+
+CVFT 的模型初始化代码没有为矩阵生成模块单独设置随机种子；`input_data_cvusa.py` 中的 `random.seed(2019)` 位于测试图片读取函数。DenseFlow 的训练入口设置 `np.random.seed(2022)`，其修正模块构造函数没有独立设置 PyTorch seed。本实验通过 `module_init_seed=42` 控制新增模块初始化，初始化分布按第 5、6 节执行。该参数可独立配置，并随完整配置写入运行记录和 checkpoint。
+
+数据划分直接读取已有的 `train_60.csv` 和 `val_60.csv`，记录清单 SHA256。相同清单保证划分一致。新增通道投影、矩阵生成和空间修正模块在 CPU 随机状态保存与恢复的范围内创建，使用 `torch.default_generator.manual_seed(module_init_seed)`，创建完成后恢复原有 CPU 随机状态，CUDA、Python 和 NumPy 的随机状态保持原值。新增模块的初始化不消耗原有训练流程后续使用的随机数。共享 backbone 仍由两条分支共同训练，模型输出和难负候选可能变化，相同随机设置不能保证整个训练过程使用完全相同的增强序列，也不能保证所有 GPU 算子逐位一致。
 
 ### 9.5 与作者实验的比较范围
 
@@ -413,7 +426,9 @@ L=\tfrac12\left[
 
 测试查询为 `val_60.csv` 中的 1,649 张街景，卫星候选为同一清单中的 1,649 张卫星图像。图片 ID 决定唯一正确候选，全部测试查询进入评价。
 
-改进模型提取最终向量后，转换为 FP32，再按特征维度执行 L2 归一化，采用 `eps=1e-12`，随后使用 FP32 矩阵乘法计算完整 `[1649,1649]` 相似度矩阵。排名计算沿用作者原 `calculate_scores` 的定义，基线直接引用已完成复现的成绩。使用已有基线 checkpoint 核验该评价流程与作者原 `predict`、`calculate_scores` 的数值和指标一致性，核验只执行评估。
+评价直接调用已完成 geo 复现使用的 `sample4geo.trainer.predict` 和 `sample4geo.evaluate.cvusa_and_cvact.calculate_scores`。`predict` 沿用原有 AMP 前向、L2 归一化、转换为 FP32 并在 GPU 保存特征的顺序；`calculate_scores` 沿用原有分块矩阵乘法、严格比较排名和 Recall 统计。基线向原预测函数提供原有全局 head 的输出；改进模型提供按可学习比例缩放并拼接后的最终向量，由原预测函数完成评价归一化。
+
+原 `predict` 增加可选的特征提取回调，以接收改进模型的视角和样本 ID，并收集诊断量。原 `calculate_scores` 增加可选的详细结果返回接口，在同一次计算中返回四项 Recall、逐查询排名和完整相似度矩阵。两个函数的默认调用方式和原有计算规则保持不变。训练、难负候选生成、独立评价及已有基线评价共用这些原有函数。
 
 评价过程中每个模型只使用所选 checkpoint 的最终向量和参数。候选集合保持完整，测试街景的真实经纬度及损伤标签只用于结果关联或分析，不参与候选筛选或分数计算。融合比例仅由训练集优化，每轮测试不单独调整该比例。
 
@@ -435,11 +450,11 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 
 ### 10.2 最佳权重
 
-改进模型每个完整训练轮次结束后评价一次。按最终组合向量的测试集 R@1 严格提高时保存 best，出现相同 R@1 时保留较早的 checkpoint。该规则沿用已完成 geo 复现的最佳权重选择方式，基线使用其已保存的 best checkpoint。
+改进模型每个完整训练轮次结束后评价一次。沿用原复现的 `best_score=0` 初始值，按最终组合向量的测试集 R@1 严格提高时保存 best，出现相同 R@1 时保留较早的 checkpoint。全部轮次均未产生 R@1 大于 0 的权重时，沿用原复现的报错行为。基线使用其已保存的 best checkpoint。
 
 训练结束后重新加载该轮 best，在完整测试集上重新计算四项指标。最终 R@5、R@10 和 R@1% 均来自该 checkpoint。
 
-另外保存训练结束权重及其训练状态，记录 optimizer、scheduler、GradScaler、已完成轮次和优化步数。checkpoint 必须保存融合参数、共用 `logit_scale` 和模型结构配置。最佳权重与最后一轮权重在文件名和元数据中明确区分。
+保存 best 和训练结束两份模型权重，包含融合参数、共用 `logit_scale`、模型结构配置、seed、已完成轮次、优化步数及划分标识，支持完整评价和参数分析。训练日志记录学习率与 GradScaler scale；两份权重文件用于评价，文件名分别为 `best.pth`、`last.pth`。
 
 ### 10.3 与已完成 geo 结果比较
 
@@ -468,9 +483,9 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 7. 使用实际前向输出验证平方根缩放、组合向量单位范数，以及组合向量点积等于 `alpha` 加权的两分支相似度之和。覆盖初始化与实际参数更新后的融合比例。
 8. 执行真实 batch 的前向、反向和参数更新，确认共享 backbone、通道投影、矩阵生成、修正模块、`fusion_logit` 及共用 `logit_scale` 均获得有限且有效的梯度；同时核对唯一训练损失确实读取最终融合向量。
 9. 在两张实际 GPU 上验证正式输入和完整 batch 的显存与主机内存，记录实际峰值。资源不足时停止并修订资源或配置，不静默改变 batch。
-10. 保存并加载真实模型权重，核对融合参数、同一输入的预测、完整测试 ID 关联，以及候选缓存和 checkpoint 的一致性。
+10. 保存并加载真实模型权重，核对融合参数、同一输入的预测和完整测试 ID 关联。
 11. 训练、推理和较大规模特征计算通过 Slurm 在计算节点进行。正式运行使用离线数据与已有权重。
-12. 使用同一个 baseline checkpoint 和完整真实测试集，分别执行作者评价流程和共用评价流程。核对查询与候选 ID 顺序、实际 tensor dtype、相似度误差、每个查询的正确候选排名及四项 Recall。相似度计算的最大绝对误差容许值为 `1e-5`，排名及 Recall 必须一致；发现差异时查明精度或处理顺序原因，在形成比较结果之前完成核验。
+12. 核验各评价入口直接调用原复现的 `predict`、`calculate_scores`，难负候选沿用原 `calculate_nearest` 和 GPU 分数计算。检查完整查询与候选 ID 的对应关系、四项 Recall 及逐查询结果，保留权重保存加载检查。
 
 ## 12 文件组织与实验记录
 
@@ -478,23 +493,23 @@ R@K=\frac{100}{Q}\sum_i\mathbf{1}[rank_i<K].
 
 改进模型本次训练输出使用服务器仓库外的独立目录，按模型名称、seed=42 和 JobID 标识。基线继续引用作业 `3979539` 的已有输出。记录至少包含：
 
-- 训练代码提交号、方案编号、完整启动参数与实际 Slurm 脚本。
+- 训练代码提交号、方案编号、完整启动参数与 Slurm 作业标识。
 - 环境、硬件、输入权重 SHA256、划分文件 SHA256。
 - 实际图像处理参数、训练 seed、采样配置和每轮样本 ID。
 - 最终融合向量的 InfoNCE 损失、共用 `logit_scale`、学习率与优化步数。
 - `fusion_logit`、`alpha`、其梯度与 checkpoint 中保存的最终融合比例。
-- Sinkhorn 误差、矩阵行熵和最大元素，以及梯度有限性检查结果。
+- Sinkhorn 误差、矩阵行熵和最大元素，以及梯度幅度、缺失和非有限值记录。
 - best 和训练结束 checkpoint，保存与加载核验结果。
-- 每轮测试指标、best 对应的完整逐查询预测与正确候选排名。
+- 训练前和每轮的训练集、测试集指标，best 对应的完整逐查询预测与正确候选排名。
 - 训练时间、预测时间、GPU 显存和主机内存。
-- 改进模型与已完成 geo 结果的逐项比较、作者评价一致性检查及异常说明。
+- 改进模型与已完成 geo 结果的逐项比较及异常说明。
 
 JobID、实际输出路径、命令及成绩在实施和运行后写入实验记录。当前方案不预填未来运行结果。
 
 ## 13 方法依据
 
-- CVFT：学习图像相关的搬移矩阵、Sinkhorn 计算及空间特征展开。参考 [Optimal Feature Transport for Cross-View Image Geo-Localization](https://arxiv.org/html/1907.05021) 和 [作者核心实现](https://raw.githubusercontent.com/YujiaoShi/cross_view_localization_CVFT/ddf6c2f6d35c0103b9315d686a3135a1a09db5fd/script/ot_net.py)。
-- DenseFlow：投影或搬移后，通过残差模块进一步处理空间特征的思路。参考 [Learning Dense Flow Field for Highly-accurate Cross-view Camera Localization](https://arxiv.org/abs/2309.15556)。本方案的 64 通道残差模块按本模型的 8×8 网格设计。
+- CVFT：学习图像相关的搬移矩阵、ReLU、代价生成参数初始化、Sinkhorn 计算及空间特征展开。参考 [Optimal Feature Transport for Cross-View Image Geo-Localization](https://arxiv.org/html/1907.05021) 和 [作者核心实现](https://raw.githubusercontent.com/YujiaoShi/cross_view_localization_CVFT/ddf6c2f6d35c0103b9315d686a3135a1a09db5fd/script/ot_net.py)。
+- DenseFlow：投影或搬移后，通过残差模块进一步处理空间特征，使用 InstanceNorm、ReLU 和 Kaiming 初始化。参考 [Learning Dense Flow Field for Highly-accurate Cross-view Camera Localization](https://arxiv.org/abs/2309.15556)、[ResidualBlock 与 RefineNet 源码](https://raw.githubusercontent.com/XianghuiZe/DenseFlow_localization/16d9f106e9cea4c04458e4cfb9be35f7fba5ece3/gen_BEV/VGG.py) 和 [RAFT 中的 InstanceNorm 配置](https://raw.githubusercontent.com/XianghuiZe/DenseFlow_localization/16d9f106e9cea4c04458e4cfb9be35f7fba5ece3/op_flow/raft.py)。本方案的一个 64 通道残差单元用于当前模型的 8×8 网格。
 - 现有 geo：共享 ConvNeXt、CVUSA 预训练、图像预处理、InfoNCE、难负采样及评价规则。对应仓库中的 `Author CVDisaster/geolocalization/` 与 `slurm/train_geoloc.sbatch`。
 
 4×16 街景源网格、8×8 卫星目标网格、5,120 维组合向量、可学习融合和空间修正模块的上述具体组合，属于本实验的网络设计。训练采用最终融合向量的作者双向 InfoNCE，CVIAN 上的收益通过本方案规定的训练和比较验证。
@@ -507,9 +522,11 @@ JobID、实际输出路径、命令及成绩在实施和运行后写入实验记
 
 `ME CVDisaster/geolocalization/model.py` 提供 `GeoModel`。训练调用 `model(ground, satellite, sample_ids=ids)`，返回两个字典。单视角调用 `model(image, view="ground", sample_ids=ids)` 或 `model(image, view="satellite", sample_ids=ids)`。
 
+`ME CVDisaster/geolocalization/spatial.py` 提供 `FeatureTransport`、`SpatialRefinement`、CVFT 卷积初始化函数及 `create_spatial_modules`。各模块按第 5、6 节初始化，`create_spatial_modules` 负责初始化随机状态的保存和恢复，`GeoModel` 直接使用返回的模块。
+
 返回字典包含 `global_features` 和 `descriptors`；组合模型还包含 `spatial_features` 和 `fusion_weight`，街景另外提供 `transport` 和 `transport_diagnostics`。`fusion_weight` 对每个样本记录同一个模型比例，供 DataParallel 汇集；`fusion_state()` 返回模型共用的标量记录。归一化、融合及损失公式见第 7、8 节。
 
-空间向量按位置、通道顺序展开，搬移使用 `P.transpose(1,2) @ G`。`ME CVDisaster/geolocalization/data.py` 调用作者的 Dataset、transforms，以及仓库根目录 `scripts/prepare_geoloc_data.py` 的 `validate_splits`。共享数据和已有 CSV 仅供读取，具体预处理见第 3 节。
+空间向量按位置、通道顺序展开，搬移使用 `P.transpose(1,2) @ G`。`ME CVDisaster/geolocalization/data.py` 直接调用原复现的 Dataset、transforms 和默认 DataLoader worker 初始化；读取已有 CSV 并记录行数及 SHA256。共享数据和已有 CSV 仅供读取，具体预处理见第 3 节。
 
 配置文件为 `ME CVDisaster/configs/geo_cvft_refine.json`。两张 GPU 使用 DataParallel 汇集特征后，在主卡计算全局 64×64 InfoNCE。正式训练入口和作业脚本仅接受 `geo_cvft_refine`、seed=42；基线模型接口用于读取已有权重进行评价。
 
@@ -519,23 +536,15 @@ JobID、实际输出路径、命令及成绩在实施和运行后写入实验记
 
 训练输出目录包含：
 
-- `run.json`：代码提交号、环境版本、GPU、后端设置、初始 logit scale 与融合比例、可训练参数数量、输入数据配置、增强参数和划分 SHA256。
-- `train_60.csv`、`val_60.csv`：本次运行使用的清单副本。
-- `submitted.sbatch`：实际提交脚本。
-- `steps.jsonl`：最终向量的 InfoNCE 损失、共用 logit scale、更新前后融合参数与比例、融合参数梯度、学习率、GradScaler 和 Sinkhorn 诊断。
-- `samples_epoch_XX.json`、`history.json`：每轮采样顺序、优化步数、评价结果、耗时和内存。
-- `best.pth`：按测试 R@1 严格提高保存的 checkpoint。
-- `last.pth`：训练完成 checkpoint。
-- `best_queries.csv`：全部查询的正确候选排名、分数、同分数量、Top-1 ID 和图片路径。
-- `best_topk.csv`：Top-K 卫星 ID、经纬度、最终分数、两个分支分数、融合比例和图片路径。
-- `best_satellite_features.pt`：完整卫星候选向量、ID、checkpoint SHA256 和融合参数；加载时必须匹配当前 checkpoint 与融合比例。
-- `best_metrics.json`、`result.json`：best 重新加载后的完整指标、分支诊断与资源记录。
-- `baseline_reference/`：读取作业 `3979539` 的已有 best checkpoint 得到的评价、一致性检查及逐查询记录。
-- `comparison/comparison.json`、`comparison/query_comparison.csv`：四项 Recall 的百分点差和全部测试图片的正确性比较。
+- `run.json`：完整配置、代码提交号、运行环境、GPU、初始权重与划分 SHA256、图像处理参数、实际调度长度，以及训练前训练集与测试集的四项 Recall 和 Sinkhorn 诊断。
+- `steps.jsonl`：每步损失、学习率、logit scale、GradScaler scale、融合比例和梯度统计、Sinkhorn 误差、行熵及最大元素。
+- `history.json`：每轮损失、训练集与测试集四项 Recall、融合比例、Sinkhorn 汇总、实际样本顺序、耗时和内存。
+- `best.pth`、`last.pth`：按第 10.2 节保存的两份模型权重与评价所需元数据。
+- `best_queries.csv`：每个查询一行，包含正确候选排名与分数、Top-1 结果、图片路径、Top-K ID 和分数列表、两个分支对正确候选及 Top-1 候选的分数、逐查询 Sinkhorn 诊断。
+- `result.json`：best 重新加载后的四项 Recall、两个分支的诊断成绩、最终融合比例、耗时和内存、保存加载检查结果，以及与基线的指标差和正确性数量比较。
+- `baseline_reference/result.json`、`baseline_reference/best_queries.csv`：已有基线权重的评价结果及逐查询结果，用于分析改进模型修正或新增的错误。
 
-`best.pth` 和 `last.pth` 均保存模型、共用 logit scale、融合参数、optimizer、scheduler、GradScaler、轮次、优化步数、采样顺序及随机生成器状态。每次评价重新生成候选特征，记录当前模型的 checkpoint 标识和融合比例。
-
-作者评价一致性检查执行时，另行输出 `author_evaluation_consistency.json` 和 `author_evaluation_queries.csv`，保存基线 checkpoint 的一致性结果及逐查询排名。
+Top-K ID 和分数列表在 CSV 单元格内使用 JSON 格式；同分候选采用数值 ID 升序排列。评价特征和完整相似度矩阵仅在当前计算期间使用，分析结果按上述文件保存。
 
 ### 14.3 运行命令
 
@@ -551,7 +560,7 @@ export CVDISASTER_COMMIT=$(git rev-parse HEAD)
 bash "ME CVDisaster/scripts/experiments/submit_geo_cvft.sh"
 ```
 
-同一个训练任务执行以下计算：训练前评价一次初始改进模型并生成难负候选；训练 10 个 epoch，每轮结束后评价；训练结束后重新加载 best 计算完整指标。随后读取作业 `3979539` 的已有 best checkpoint，执行当前与作者的评价流程，保存逐查询结果并计算比较统计。已有基线在该过程中的参数更新次数为零。
+同一个训练任务执行以下计算：训练前评价初始模型的测试集和训练集，生成难负候选并 shuffle；训练 10 个 epoch，每轮结束后评价测试集和训练集、生成难负候选、选择 best 并 shuffle；训练结束后重新加载 best 计算完整指标并检查保存加载结果。随后读取作业 `3979539` 的已有 best checkpoint，调用同一套原复现评价函数，保存逐查询结果并计算比较统计。已有基线在该过程中的参数更新次数为零。历史成绩和本次成绩按实际数值记录并比较。
 
 需要独立读取本次改进模型权重进行评估时，使用以下命令，将路径替换为实际输出目录：
 
@@ -562,16 +571,16 @@ unset SBATCH_GET_USER_ENV SLURM_GET_USER_ENV SBATCH_EXPORT SLURM_EXPORT_ENV
 sbatch --export=ALL "ME CVDisaster/scripts/experiments/geo_cvft_refine.sbatch"
 ```
 
-本次结果比较按照第 10.3 节，直接使用作业 `3979539` 的已有结果和本次改进模型结果。训练任务会自动生成比较文件。需要使用已有逐查询记录重新计算比较统计时，调用 `compare.py --run <改进模型output目录> --baseline-queries <基线best_queries.csv> --output <仓库外的新目录>`；该工具只读取结果文件。
+本次结果比较按照第 10.3 节，直接使用作业 `3979539` 的已有结果和本次改进模型结果，比较统计统一写入 `result.json`。需要单独导出已有逐查询记录的比较报告时，调用 `compare.py --run <改进模型output目录> --baseline-queries <基线best_queries.csv> --output <仓库外的新目录>`；该工具只读取结果文件。
 
 ### 14.4 验收脚本与作业的用途
 
 验收脚本检查代码是否正确完成指定计算，检查结果用于发现尺寸、数值、梯度、内存及保存加载问题。正式训练结果用于评价模型的检索效果，两者分别记录。
 
-`ME CVDisaster/validate.py` 使用真实 CVIAN 图片和已有 CVUSA 初始权重，检查训练 batch 64、评价 batch 128、两张 A100、独立单视角预测、矩阵和特征顺序、均值关系、向量范数、融合公式、最终向量损失、各模块梯度及候选缓存。它会针对配置中列出的每种模型完成一次参数更新，随后执行完整测试集评估、保存和加载检查，输出验收 JSON 与验收权重。当前默认配置包含 baseline 和改进模型，因此调用该入口会检查这两种模型，并分别更新一次参数。
+`ME CVDisaster/validate.py` 使用真实 CVIAN 图片和已有 CVUSA 初始权重，检查训练 batch 64、评价 batch 128、两张 A100、独立单视角预测、矩阵和特征顺序、均值关系、向量范数、融合公式、最终向量损失及各模块梯度。它会针对配置中列出的每种模型完成一次参数更新，随后执行完整测试集评估、保存和加载检查，输出验收 JSON 与验收权重。当前默认配置包含 baseline 和改进模型，因此调用该入口会检查这两种模型，并分别更新一次参数。
 
 `CVDISASTER_MODE=validate` 会通过同一 Slurm 脚本申请计算节点并执行 `validate.py`。这是独立的计算作业，需要 GPU 资源，其输出权重和成绩只用于检查计算。本次运行安排未包含该独立作业，验收权重不作为本次正式训练的初始权重。
 
-`ME CVDisaster/geolocalization/author_validation.py` 使用同一个基线 checkpoint，调用作者的 `predict`、`calculate_scores`，与当前评价流程比较完整测试集的 ID 顺序、实际 dtype、相似度、逐查询排名和四项 Recall。它只执行评估，目的在于确认与已完成 geo 结果使用相同的指标定义和计算方式。数值要求见第 11 节；检查失败时保存诊断并终止。
+评价函数由 `Author CVDisaster/geolocalization/sample4geo/trainer.py` 的 `predict` 和 `sample4geo/evaluate/cvusa_and_cvact.py` 的 `calculate_scores` 提供。`ME CVDisaster/geolocalization/evaluation.py` 负责模型视角适配、诊断量收集和结果文件输出。权重保存加载检查继续比较保存时与重新加载后的融合参数、查询排名及 Recall。
 
 第 11 节列出的检查项目描述需要核验的计算内容；实际执行过的检查、作业编号和结果分别记录。正式作业的运行结果以对应日志和输出文件为准。

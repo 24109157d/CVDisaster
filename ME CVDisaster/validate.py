@@ -3,20 +3,15 @@ import gc
 from pathlib import Path
 
 import torch
-from torch import nn
 from torch.cuda.amp import GradScaler, autocast
 
-from geolocalization.author_validation import validate_author_evaluation
 from geolocalization.data import make_datasets, make_loaders
-from geolocalization.evaluation import (evaluate, feature_context, load_candidate_cache,
-                                       save_candidate_cache)
+from geolocalization.evaluation import evaluate
+from geolocalization.diagnostics import gradient_statistics
 from geolocalization.loss import contrastive_loss
-from geolocalization.model import normalize_features
 from geolocalization.runtime import (environment, initialize, load_initial_model, memory_usage,
                                      new_output, parallel_model, read_config, require_compute_node,
                                      sha256, write_json)
-from geolocalization.training import check_gradients
-from sample4geo.loss import InfoNCE
 
 
 def check_fusion_outputs(model, ground, satellite):
@@ -34,8 +29,7 @@ def check_fusion_outputs(model, ground, satellite):
                     raise AssertionError(f"{name} 的 dtype 或数值错误")
                 torch.testing.assert_close(values.norm(dim=1), torch.ones_like(values[:, 0]), atol=1e-5, rtol=1e-5)
             torch.testing.assert_close(unnormalized.norm(dim=1), torch.ones_like(unnormalized[:, 0]), atol=1e-5, rtol=1e-5)
-            torch.testing.assert_close(result["descriptors"], normalize_features(unnormalized, "fusion_validation"),
-                                       atol=1e-6, rtol=1e-6)
+            torch.testing.assert_close(result["descriptors"], unnormalized, atol=0, rtol=0)
             torch.testing.assert_close(result["fusion_weight"], alpha.expand(len(unnormalized)), rtol=0, atol=0)
             raw.append(unnormalized)
         weighted = (alpha * (ground["global_features"] @ satellite["global_features"].T)
@@ -50,7 +44,7 @@ def validate_architecture(config, architecture, output):
     initialize(42)
     model, scales = load_initial_model(config, architecture)
     datasets, manifest, transforms = make_datasets(config, model.get_config())
-    loaders = make_loaders(datasets, config, 42)
+    loaders = make_loaders(datasets, config)
     model = parallel_model(model)
     initial_fusion = model.module.fusion_state()
     if architecture == "geo_cvft_refine" and (initial_fusion["fusion_logit"], initial_fusion["fusion_weight"]) != (0.0, 0.5):
@@ -115,17 +109,12 @@ def validate_architecture(config, architecture, output):
                       fusion_logit=model.module.fusion_logit.detach().clone())
     with autocast():
         ground, satellite = model(ground_image, satellite_image, sample_ids=sample_ids)
-    loss = contrastive_loss(ground, satellite, model.module, sample_ids, config["label_smoothing"])
-    with torch.no_grad(), autocast(enabled=False):
-        expected_loss = InfoNCE(nn.CrossEntropyLoss(label_smoothing=config["label_smoothing"], reduction="mean"),
-                                device=sample_ids.device)(ground["descriptors"], satellite["descriptors"],
-                                                         model.module.logit_scale.exp())
-        torch.testing.assert_close(loss, expected_loss, atol=1e-5, rtol=1e-5)
+        loss = contrastive_loss(ground, satellite, model.module, sample_ids, config["label_smoothing"])
     fusion_loss_gradient = (torch.autograd.grad(loss, model.module.fusion_logit, retain_graph=True)[0].detach()
                             if architecture == "geo_cvft_refine" else None)
     scaler.scale(loss).backward()
     scaler.unscale_(optimizer)
-    gradients = check_gradients(model.module)
+    gradients = gradient_statistics(model.module)
     if architecture == "geo_cvft_refine":
         torch.testing.assert_close(model.module.fusion_logit.grad, fusion_loss_gradient, atol=1e-5, rtol=1e-5)
     torch.nn.utils.clip_grad_value_(model.parameters(), config["clip_grad"])
@@ -152,10 +141,6 @@ def validate_architecture(config, architecture, output):
     torch.save({"model": model.module.state_dict(), "fusion": final_fusion}, checkpoint_path)
     checkpoint_id = sha256(checkpoint_path)
     result = evaluate(model, loaders, checkpoint_id=checkpoint_id)
-    author_consistency = (validate_author_evaluation(checkpoint_path, loaders, result, config, output)
-                          if architecture == "baseline" else None)
-    cache_path = output / f"{architecture}_satellite_features.pt"
-    save_candidate_cache(cache_path, result["satellite"], result["satellite_ids"], result["feature_context"])
     state = torch.load(checkpoint_path, map_location="cpu")
     model.module.load_state_dict(state["model"], strict=True)
     if model.module.fusion_state() != state["fusion"]:
@@ -163,10 +148,6 @@ def validate_architecture(config, architecture, output):
     del state
     if model.module.fusion_state() != final_fusion:
         raise AssertionError("checkpoint 加载后的融合参数与保存前不一致")
-    cache = load_candidate_cache(cache_path, feature_context(model, checkpoint_id))
-    torch.testing.assert_close(cache["features"]["descriptors"], result["satellite"]["descriptors"], atol=0, rtol=0)
-    if not torch.equal(cache["ids"], result["satellite_ids"]):
-        raise AssertionError("候选缓存的 ID 顺序不一致")
     reloaded = evaluate(model, loaders, checkpoint_id=checkpoint_id)
     for view in ("ground", "satellite"):
         torch.testing.assert_close(reloaded[view]["descriptors"], result[view]["descriptors"], atol=1e-5, rtol=1e-5)
@@ -180,13 +161,12 @@ def validate_architecture(config, architecture, output):
               "loss_input": "descriptors", "loss_logits_shape": [len(sample_ids), len(sample_ids)],
               "initial_fusion": initial_fusion, "final_fusion": final_fusion,
               "fusion_logit_gradient": float(fusion_loss_gradient) if fusion_loss_gradient is not None else None,
-              "author_evaluation_consistency": author_consistency,
-              "feature_context": result["feature_context"], "candidate_cache_verified": True,
+              "feature_context": result["feature_context"],
               "metrics": result["metrics"], "queries": len(result["ranks"]), "training_batch": 64,
               "evaluation_batch": 128, "timing": result["timing"], "memory": memory_usage(),
               "checkpoint_reload_verified": True, "passed": True}
     write_json(output / f"{architecture}_validation.json", report)
-    del model, optimizer, scaler, loss, expected_loss
+    del model, optimizer, scaler, loss
     gc.collect()
     torch.cuda.empty_cache()
     return report

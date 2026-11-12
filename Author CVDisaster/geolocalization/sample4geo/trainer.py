@@ -5,7 +5,8 @@ from .utils import AverageMeter
 from torch.cuda.amp import autocast
 import torch.nn.functional as F
 
-def train(train_config, model, dataloader, loss_function, optimizer, scheduler=None, scaler=None):
+def train(train_config, model, dataloader, loss_function, optimizer, scheduler=None, scaler=None,
+          forward_adapter=None, step_callback=None):
 
     # set model train mode
     model.train()
@@ -36,7 +37,10 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
                 reference = reference.to(train_config.device)
             
                 # Forward pass
-                features1, features2 = model(query, reference)
+                if forward_adapter is None:
+                    features1, features2 = model(query, reference)
+                else:
+                    features1, features2 = forward_adapter(model, query, reference, ids)
                 if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1: 
                     loss = loss_function(features1, features2, model.module.logit_scale.exp())
                 else:
@@ -54,6 +58,8 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
             # Update model parameters (weights)
             scaler.step(optimizer)
             scaler.update()
+            if step_callback is not None:
+                step_callback(loss, features1, features2)
 
             # Zero gradients for next step
             optimizer.zero_grad()
@@ -69,7 +75,10 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
             reference = reference.to(train_config.device)
 
             # Forward pass
-            features1, features2 = model(query, reference)
+            if forward_adapter is None:
+                features1, features2 = model(query, reference)
+            else:
+                features1, features2 = forward_adapter(model, query, reference, ids)
             if torch.cuda.device_count() > 1 and len(train_config.gpu_ids) > 1: 
                 loss = loss_function(features1, features2, model.module.logit_scale.exp())
             else:
@@ -85,6 +94,8 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
             
             # Update model parameters (weights)
             optimizer.step()
+            if step_callback is not None:
+                step_callback(loss, features1, features2)
             # Zero gradients for next step
             optimizer.zero_grad()
             
@@ -110,7 +121,7 @@ def train(train_config, model, dataloader, loss_function, optimizer, scheduler=N
     return losses.avg
 
 
-def predict(train_config, model, dataloader):
+def predict(train_config, model, dataloader, feature_extractor=None):
     
     model.eval()
     
@@ -134,7 +145,10 @@ def predict(train_config, model, dataloader):
             with autocast():
          
                 img = img.to(train_config.device)
-                img_feature = model(img)
+                if feature_extractor is None:
+                    img_feature = model(img)
+                else:
+                    img_feature = feature_extractor(model, img, ids)
             
                 # normalize is calculated in fp32
                 if train_config.normalize_features:

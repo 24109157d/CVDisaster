@@ -9,6 +9,8 @@
 - 使用的代码提交：`c128a4fea610de717da2fcc954a44fe64aeba868`，通过 Git bundle 同步到超算，工作目录通过 fast-forward 更新。
 - 提交回执状态：`PENDING`，原因为 `Priority`，`Restarts=0`，无依赖作业。
 - 提交后账号队列中只有本作业。
+- 启动时间：2026-11-12 13:43:24（Asia/Shanghai）；核对时状态为 `RUNNING`，节点 `g0176`，`Restarts=0`。
+- 启动日志确认 `MODE=train` 和上述代码版本，已识别两张 NVIDIA A100-SXM4-40GB。核对时处于初始化阶段，日志尚无 Python 报错。
 - 回执文件：`/scratch/liuzeyu/heyinxi/CVDisaster/.local-cache/geo-reuse-checks/submission-c128a4f.jobid`。
 - 日志：`/scratch/liuzeyu/heyinxi/logs/geo-cvft-4277758.log`。
 - 运行目录：`/scratch/liuzeyu/heyinxi/runs/geo_cvft_refine-seed42-4277758`。

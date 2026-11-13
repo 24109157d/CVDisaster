@@ -1,0 +1,46 @@
+{
+  "experiment": "combined_experiment_1",
+  "data_root": "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN",
+  "train_split": "train_60.csv",
+  "test_split": "val_60.csv",
+  "split_seed": 42,
+  "train_ratio": 0.6,
+  "expected_total": 4121,
+  "checkpoint_policy": "best",
+  "geo": {
+    "backbone": "convnext_base.fb_in22k_ft_in1k_384",
+    "initial_checkpoint": "/scratch/liuzeyu/heyinxi/pretrained/weights_e40_98.6830.pth",
+    "initial_sha256": "739cf00d303836fba1195f1bb8d54c4b13c53926ce3212fc9ceced335fc59a23",
+    "seed": 42,
+    "epochs": 10,
+    "batch_size": 64,
+    "eval_batch_size": 128,
+    "num_workers": 4,
+    "gpus": 2,
+    "lr": 0.0005,
+    "weight_decay": 0.01,
+    "label_smoothing": 0.1,
+    "warmup_epochs": 1,
+    "clip_grad": 100.0,
+    "prob_flip": 0.5,
+    "prob_rotate": 0.75,
+    "neighbour_select": 64,
+    "neighbour_range": 128
+  },
+  "est": {
+    "backbone": "tiny",
+    "initial_weights": "/scratch/liuzeyu/heyinxi/pretrained/keras/datasets/gcvit_tiny_weights.h5",
+    "epochs": 200,
+    "batch_size": 12,
+    "eval_batch_size": 12,
+    "gpus": 2,
+    "lr": 0.01,
+    "warmup_lr": 0.001,
+    "warmup_steps": 10
+  },
+  "statistics": {
+    "bootstrap_seed": 42,
+    "bootstrap_repetitions": 10000,
+    "confidence_level": 0.95
+  }
+}

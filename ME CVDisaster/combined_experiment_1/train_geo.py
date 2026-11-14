@@ -2,7 +2,7 @@ import argparse
 import time
 
 from common import (DEFAULT_CONFIG, environment, new_directory, read_config, require_compute_node,
-                    sha256, write_json)
+                    sample_ids_for_record, sha256, write_json)
 from data import load_fixed_splits
 from geo import create_model, make_loaders, require_gpus, runtime_config
 
@@ -69,7 +69,7 @@ def main():
     history = []
     for epoch in range(1, params['epochs'] + 1):
         started = time.monotonic()
-        sample_ids = list(train_dataloader.dataset.samples)
+        sample_ids = sample_ids_for_record(train_dataloader.dataset.samples)
         train_loss = train(config, model, dataloader=train_dataloader, loss_function=loss_function,
                            optimizer=optimizer, scheduler=scheduler, scaler=scaler)
         r1_test = evaluate(config=config, model=model, reference_dataloader=reference_dataloader_test,

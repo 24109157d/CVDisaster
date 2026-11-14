@@ -18,8 +18,13 @@ def read_json(path):
 
 
 def write_json(path, value):
+    payload = json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)
     with Path(path).open('x', encoding='utf-8') as handle:
-        json.dump(value, handle, ensure_ascii=False, indent=2, allow_nan=False)
+        handle.write(payload)
+
+
+def sample_ids_for_record(samples):
+    return [int(sample_id) for sample_id in samples]
 
 
 def sha256(path):

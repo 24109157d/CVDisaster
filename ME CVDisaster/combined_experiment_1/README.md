@@ -28,6 +28,8 @@ seed=42固定两项任务共用的数据划分。Est训练入口保持复现代�
 
 Geo复用作者的Dataset、图像增强、双向InfoNCE、混合精度和相似负样本采样；label smoothing=0.1，梯度值裁剪100，翻转概率0.5、旋转概率0.75，neighbour_select=64、neighbour_range=128。自定义采样可能舍弃部分尾批样本，调度步数保持原计算位置；每轮实际样本ID及调度步数写入训练记录。
 
+记录中的样本ID统一转换为Python `int`，保持完整整数值；JSON序列化在创建目标文件之前完成。
+
 Est使用原始街景512×1024和卫星512×512，`decode_png`、默认双线性resize及0—255像素值。保持两分支特征拼接、Dense 64、LeakyReLU、Dropout 0.2、三分类softmax和交叉熵。训练仅使用正确配对，按固定训练清单顺序读取。
 
 Geo在训练前评价测试集，随后计算训练集相似负样本并执行shuffle；每轮按训练、测试评价、训练集相似度计算、best更新、shuffle的顺序执行，最后一轮也执行shuffle。按测试R@1严格提高保存best，相同分数保留较早轮次，保存 `weights_end.pth` 后重新加载best评价。
@@ -63,6 +65,7 @@ Geo使用全部1,649张测试街景检索全部1,649张测试卫星，输出Top-
 - `scripts/submit_pipeline.sh`：提交一个 `combined_experiment_1` 作业，在同一资源分配中依次固化划分、训练Geo、训练Est、执行检索及Est配对比较；提交参数为 `CVDISASTER_COMMIT`。
 - `scripts/pipeline.sbatch`：完整串联作业，使用两张GPU、8个CPU、60,000 MiB主机内存，时间上限48小时。任一阶段失败立即停止。
 - `prepare_splits.py --output <固定清单目录>`：检查真实图片及seed=42划分，生成共用快照。
+- `reuse_geo.py --reference <复用记录JSON> --check-only`：核验已有Geo权重、原训练配置、原划分、源码、日志及提交记录。
 - `train_geo.py --splits <固定清单目录> --output <新Geo目录>`：独立训练Geo。
 - `train_est.py --splits <同一固定清单目录> --output <新Est目录> [--resume-from <旧Est目录>]`：独立训练Est或显式续训。
 - `retrieve.py --splits <固定清单目录> --geo-run <Geo目录> --output <新评价目录>`：完整测试集的实际检索。
@@ -72,5 +75,11 @@ Geo使用全部1,649张测试街景检索全部1,649张测试卫星，输出Top-
 训练与推理入口要求Slurm计算节点，均使用两张GPU。完整实验使用 `submit_pipeline.sh` 提交一个作业。`scripts/train.sbatch` 和 `scripts/evaluate.sbatch` 保留单阶段运行及显式续训入口；完整串联作业内直接调用Python入口。
 
 完整串联作业保存在 `/scratch/liuzeyu/heyinxi/runs/combined-experiment-1-作业编号/`，包含 `source/`、`splits/`、`geo/`、`est/` 和 `evaluation/`，同一个JobID贯穿全部阶段。
+
+## 已完成Geo的复用
+
+`configs/geo_4301663.json` 记录作业4301663已完成的10轮Geo训练及best权重，包含真实训练清单、权重、源码和日志的SHA256。提交入口显式接受 `--reuse-geo-reference configs/geo_4301663.json` 时，单个作业依次复用Geo、训练Est、检索及评价。
+
+复用阶段核验原作业的固定清单及当前共享清单与记录中的SHA256完全一致，逐字节复制原作业的 `splits/` 和best权重到新作业目录，并记录权重来源。Est读取新作业中复制的这份固定清单，成员和顺序与Geo原训练划分保持一致。原作业的文件保持原状。
 
 评价输出为 `geo_predictions.csv`、`geo.json`、`predictions.csv` 和 `result.json`；其中逐图结果包含两种输入的预测、全部类别概率、检索卫星、真实卫星及Geo正确性。

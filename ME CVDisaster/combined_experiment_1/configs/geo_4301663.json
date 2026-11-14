@@ -1,0 +1,19 @@
+{
+  "source_job_id": "4301663",
+  "source_commit": "c3487fbac354ba634a7c2708eade2c550a8d6443",
+  "source_run": "/scratch/liuzeyu/heyinxi/runs/combined-experiment-1-4301663",
+  "submission_record": "/scratch/liuzeyu/heyinxi/runs/submit-combined-4301663.json",
+  "training_script_sha256": "7a5101ac0ec40317d675bdb30fd15b5d80948d9a9321db4a80103a1609219ce8",
+  "training_log": "/scratch/liuzeyu/heyinxi/logs/combined-experiment-1-4301663.log",
+  "training_log_sha256": "ea518668e254a14c60e7da32cb3f23af0e971eb38c6e0212cfa1e53ecf512415",
+  "completed_epochs": 10,
+  "best_epoch": 10,
+  "best_score": 79.805942995755,
+  "checkpoint": "weights_e10_79.8059.pth",
+  "checkpoint_sha256": "8a40ce5e51c2544d2023903fb36130da2b5eba7359afcfbc06bf4ca26408ce08",
+  "final_checkpoint_sha256": "00fbee6d8da133fdbccd0151d87183026c3c71a3e0bf2ebfe4489c615a3e35fd",
+  "split_sha256": {
+    "train_60.csv": "53286cb98749755f7e04d1b8b2b4a64a00331389ea75dff6d1a99b5d99378ccd",
+    "val_60.csv": "f37b6f4e18f001d1b2e46be92fd819275ac6c45581ec3eca30adf7c08d88548d"
+  }
+}

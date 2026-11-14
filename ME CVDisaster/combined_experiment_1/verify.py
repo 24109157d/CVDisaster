@@ -3,11 +3,13 @@ import ast
 import csv
 import math
 from pathlib import Path, PurePosixPath
+import uuid
 
 import numpy as np
 
 from analysis import classification_metrics, paired_effect
-from common import CLASS_NAMES, DEFAULT_CONFIG, REPOSITORY, read_config, read_csv, read_json
+from common import (CLASS_NAMES, DEFAULT_CONFIG, REPOSITORY, read_config, read_csv, read_json,
+                    sample_ids_for_record, write_json)
 from data import read_samples
 from prepare_splits import expected_pairs
 
@@ -131,6 +133,14 @@ def main():
     train_ids = {PurePosixPath(pair[0]).stem for pair in train}
     test_ids = {str(sample.sample_id) for sample in samples}
     assert len(train) == 2472 and len(test) == 1649 and not train_ids & test_ids
+    numpy_ids = np.asarray([sample.sample_id for sample in samples], dtype=np.int64)
+    recorded_ids = sample_ids_for_record(numpy_ids)
+    assert all(type(sample_id) is int for sample_id in recorded_ids)
+    record_path = REPOSITORY / '.local-cache' / 'combined-experiment-1' / f'ids-{uuid.uuid4().hex}.json'
+    record_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(record_path, {'sample_ids': recorded_ids})
+    assert read_json(record_path)['sample_ids'] == numpy_ids.tolist()
+    print('REAL_NUMPY_SAMPLE_IDS_JSON_ROUNDTRIP_VERIFIED', len(recorded_ids))
     labels_by_path = {row['svi_relative_path']: CLASS_NAMES.index(row['label']) for row in catalog}
     for sample in samples:
         assert sample.label == labels_by_path[str(PurePosixPath(*PurePosixPath(sample.raw_ground).parts[1:]))]

@@ -47,10 +47,15 @@ export LD_LIBRARY_PATH="$EST_ENV/lib${BASE_LD_LIBRARY_PATH:+:$BASE_LD_LIBRARY_PA
 
 export PATH="$GEO_ENV/bin:$BASE_PATH"
 export LD_LIBRARY_PATH="$GEO_ENV/lib${BASE_LD_LIBRARY_PATH:+:$BASE_LD_LIBRARY_PATH}"
-printf 'PIPELINE_STAGE=prepare_splits\n'
-"$GEO_ENV/bin/python" -u prepare_splits.py --output "$RUN/splits"
-printf 'PIPELINE_STAGE=train_geo\n'
-"$GEO_ENV/bin/python" -u train_geo.py --splits "$RUN/splits" --output "$RUN/geo"
+if [[ -n "${CVDISASTER_REUSE_GEO_REFERENCE:-}" ]]; then
+    printf 'PIPELINE_STAGE=reuse_geo\n'
+    "$GEO_ENV/bin/python" -u reuse_geo.py --reference "$CVDISASTER_REUSE_GEO_REFERENCE" --splits-output "$RUN/splits" --output "$RUN/geo"
+else
+    printf 'PIPELINE_STAGE=prepare_splits\n'
+    "$GEO_ENV/bin/python" -u prepare_splits.py --output "$RUN/splits"
+    printf 'PIPELINE_STAGE=train_geo\n'
+    "$GEO_ENV/bin/python" -u train_geo.py --splits "$RUN/splits" --output "$RUN/geo"
+fi
 
 export PATH="$EST_ENV/bin:$BASE_PATH"
 export LD_LIBRARY_PATH="$EST_ENV/lib${BASE_LD_LIBRARY_PATH:+:$BASE_LD_LIBRARY_PATH}"

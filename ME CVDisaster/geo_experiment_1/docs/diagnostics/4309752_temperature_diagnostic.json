@@ -1,0 +1,28 @@
+{
+  "source_job": 4309752,
+  "checkpoint_sha256": "96ec5397d2188143c319b4bc859f7c8c685b1b6676d77bf5f3cbe50d71d7abea",
+  "split": "test_diagnostic_only",
+  "parameter_updates": 0,
+  "candidate_count": 20,
+  "valid_queries": 1644,
+  "total_queries": 1649,
+  "label_smoothing": 0.1,
+  "global_temperature": 0.0820680131104886,
+  "local_weight": 0.4,
+  "global_scores_source": "4316111 CPU FP32 inference",
+  "local_scores_source": "4309752 saved GPU inference scores",
+  "results": [
+    {"temperature": 0.05, "local_top20_ce": 1.221359133720398, "fusion_top20_ce": 1.0679616928100586, "local_gradient_norm_mean": 6.887689590454102, "local_top1_correct": 1303, "fusion_top1_correct": 1386},
+    {"temperature": 0.07, "local_top20_ce": 1.1906356811523438, "fusion_top20_ce": 1.1139518022537231, "local_gradient_norm_mean": 5.710769176483154, "local_top1_correct": 1303, "fusion_top1_correct": 1386},
+    {"temperature": 0.0820680131104886, "local_top20_ce": 1.232234239578247, "fusion_top20_ce": 1.193355679512024, "local_gradient_norm_mean": 5.409250736236572, "local_top1_correct": 1303, "fusion_top1_correct": 1386},
+    {"temperature": 0.1, "local_top20_ce": 1.3291897773742676, "fusion_top20_ce": 1.33449125289917, "local_gradient_norm_mean": 5.131391525268555, "local_top1_correct": 1303, "fusion_top1_correct": 1386},
+    {"temperature": 0.2, "local_top20_ce": 1.8840913772583008, "fusion_top20_ce": 1.9617003202438354, "local_gradient_norm_mean": 3.670442819595337, "local_top1_correct": 1303, "fusion_top1_correct": 1386}
+  ],
+  "interpretation": "固定分数的温度诊断只反映损失、置信度与评分梯度。结果使用测试集，不能认定为独立验证的最佳训练温度。此处局部交叉熵使用20个候选，正式局部训练使用12个候选。",
+  "proposed_training_temperatures": {"local": 0.07, "fusion": 0.05},
+  "references": [
+    "https://arxiv.org/html/2012.09740v2",
+    "https://proceedings.mlr.press/v119/chen20j/chen20j.pdf",
+    "https://proceedings.mlr.press/v70/guo17a/guo17a.pdf"
+  ]
+}

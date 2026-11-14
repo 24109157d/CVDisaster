@@ -110,18 +110,15 @@ class LocalMatcher(nn.Module):
                                           config["sinkhorn_max_iterations"], config["sinkhorn_check_interval"],
                                           config["sinkhorn_tolerance"])
         self.scoring = nn.Sequential(nn.Linear(2 * dimension + 6, 64), nn.ReLU(), nn.Linear(64, 1), nn.Tanh())
-        self.gate = nn.Sequential(nn.Linear(10, 16), nn.ReLU(), nn.Linear(16, 1, bias=False))
-        beta = config["local_weight_init"]
-        if not 0 < beta < 1 or dimension % 2 or dimension % config["attention_heads"] or self.pair_group_size < 1:
+        self.local_weight = float(config["local_weight"])
+        if not 0 <= self.local_weight <= 1 or dimension % 2 or dimension % config["attention_heads"] or self.pair_group_size < 1:
             raise ValueError("局部模块形状或初始化参数不符合范围")
-        self.fusion_logit = nn.Parameter(torch.tensor(math.log(beta / (1 - beta))))
         for layer in self.modules():
             if isinstance(layer, (nn.Linear, nn.Conv2d)):
                 nn.init.xavier_uniform_(layer.weight)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         nn.init.normal_(self.view_embedding, std=0.02)
-        nn.init.zeros_(self.gate[-1].weight)
 
     def encode(self, stage2, stage3, view):
         if view not in ("ground", "satellite") or stage2.shape[1] != 512 or stage3.shape[1] != 1024:
@@ -165,34 +162,24 @@ class LocalMatcher(nn.Module):
             groups.append(result)
         return tuple(torch.cat([group[index] for group in groups]) for index in range(3))
 
-    def fuse(self, global_scores, local_scores, statistics):
+    def fuse(self, global_scores, local_scores):
         if global_scores.shape != local_scores.shape or global_scores.shape[1] < 2:
             raise ValueError("融合候选分数形状错误")
         global_scores = global_scores.detach().float()
         local_scores = local_scores.float()
         with torch.autocast(device_type=global_scores.device.type, enabled=False):
-            g_values, g_order = global_scores.topk(2, dim=1)
-            l_values, l_order = local_scores.detach().topk(2, dim=1)
-            indices = torch.arange(len(global_scores), device=global_scores.device)
-            local_top = l_order[:, 0]
-            inputs = torch.cat(((g_values[:, 0] - g_values[:, 1])[:, None],
-                                (l_values[:, 0] - l_values[:, 1])[:, None],
-                                (g_order[:, 0] == local_top).float()[:, None],
-                                (g_values[:, 0] - global_scores[indices, local_top])[:, None],
-                                statistics[indices, local_top].detach().float()), 1).detach()
-            beta = (self.gate(inputs).squeeze(1) + self.fusion_logit).sigmoid()
-            scores = (1 - beta[:, None]) * global_scores + beta[:, None] * local_scores
+            beta = local_scores.new_full((len(local_scores),), self.local_weight)
+            scores = (1 - self.local_weight) * global_scores + self.local_weight * local_scores
         return scores, beta
 
 
 def create_local_optimizer(model, config):
-    groups = {"local": [], "gate": [], "bin": [], "fusion": []}
+    groups = {"local": [], "bin": []}
     for name, parameter in model.named_parameters():
-        group = "fusion" if name == "fusion_logit" else "bin" if name == "transport.bin_score" else (
-            "gate" if name.startswith("gate.") else "local")
+        group = "bin" if name == "transport.bin_score" else "local"
         groups[group].append(parameter)
     return torch.optim.AdamW([
         {"name": name, "params": values,
-         "lr": config["fusion_lr"] if name == "fusion" else config["gate_lr"] if name == "gate" else config["local_lr"],
-         "weight_decay": 0.0 if name in ("fusion", "bin") else config["weight_decay"]}
+         "lr": config["local_lr"],
+         "weight_decay": 0.0 if name == "bin" else config["weight_decay"]}
         for name, values in groups.items()], betas=tuple(config["betas"]), eps=config["eps"], amsgrad=False)

@@ -22,7 +22,7 @@ from sample4geo.model import TimmModel
 
 
 def configuration():
-    return json.loads((EXPERIMENT / "configs" / "geo_partial_match_gate.json").read_text(encoding="utf-8"))
+    return json.loads((EXPERIMENT / "configs" / "geo_partial_match_fixed40.json").read_text(encoding="utf-8"))
 
 
 def small_configuration():
@@ -114,17 +114,24 @@ class PartialMatchingTests(unittest.TestCase):
             if left.grad is not None:
                 torch.testing.assert_close(left.grad, right.grad, rtol=2e-3, atol=2e-5, msg=name)
 
-    def test_query_gate_detaches_global_scores_and_preserves_consensus(self):
+    def test_fixed_fusion_preserves_global_gradient_boundary_and_local_weight(self):
         model = LocalMatcher(small_configuration())
         global_scores = torch.tensor([[0.8, 0.7, 0.2], [0.3, 0.7, 0.2]], requires_grad=True)
         local_scores = torch.tensor([[0.7, 0.6, 0.1], [0.5, 0.8, 0.4]], requires_grad=True)
-        fused, beta = model.fuse(global_scores, local_scores, torch.zeros(2, 3, 6))
-        torch.testing.assert_close(beta, torch.full_like(beta, 0.05))
+        fused, beta = model.fuse(global_scores, local_scores)
+        torch.testing.assert_close(beta, torch.full_like(beta, 0.4))
+        torch.testing.assert_close(fused, torch.tensor([[0.76, 0.66, 0.16], [0.38, 0.74, 0.28]]))
         self.assertEqual(fused.argmax(1).tolist(), global_scores.argmax(1).tolist())
         F.cross_entropy(fused, torch.tensor([0, 1])).backward()
         self.assertIsNone(global_scores.grad)
         self.assertGreater(float(local_scores.grad.abs().sum()), 0)
-        self.assertIsNotNone(model.fusion_logit.grad)
+        self.assertFalse(beta.requires_grad)
+        self.assertEqual({name for name, _ in model.named_parameters() if 'fusion' in name or 'gate' in name}, set())
+        optimizer = create_local_optimizer(model, small_configuration())
+        self.assertEqual({group['name'] for group in optimizer.param_groups}, {'local', 'bin'})
+        self.assertTrue(all(group['lr'] == 5e-4 for group in optimizer.param_groups))
+        optimizer.step()
+        self.assertEqual(model.local_weight, 0.4)
 
     def test_original_convnext_forward_with_read_only_cache_hooks(self):
         model = TimmModel("convnext_base.fb_in22k_ft_in1k_384", pretrained=False, img_size=384).eval()
@@ -159,7 +166,9 @@ class PartialMatchingTests(unittest.TestCase):
         model.checkpointing = False
         ground, satellite = feature_cache("ground"), feature_cache("satellite")
         global_scores = ground.global_features @ satellite.global_features.T
-        lists, top = mine_local_candidates(model, ground, satellite, global_scores, config, "cpu", 42)
+        top = ranked_candidates(global_scores, satellite.ids, config['rerank_candidates'])
+        scores, _, _ = score_candidates(model, ground, satellite, torch.arange(10), top, 'cpu')
+        lists = mine_local_candidates(ground, satellite, torch.arange(10), top, scores, config, random.Random(42))
         self.assertEqual(lists.shape, (10, 4))
         self.assertEqual(lists[:, 0].tolist(), list(range(10)))
         for row in lists.tolist():
@@ -169,8 +178,8 @@ class PartialMatchingTests(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(set(ids), {id(p) for p in model.parameters()})
         before = model.projection2.weight.detach().clone()
-        local, fusion, info = direction_losses(model, ground, satellite, [0, 1, 2], lists, top,
-                                               global_scores, torch.tensor(5.0), config, "cpu")
+        local, fusion, info = direction_losses(model, ground, satellite, [0, 1, 2], top,
+                                               global_scores, config, "cpu", random.Random(42))
         (0.5 * local + 0.5 * fusion).backward()
         optimizer.step()
         self.assertFalse(torch.equal(before, model.projection2.weight))
@@ -182,6 +191,11 @@ class PartialMatchingTests(unittest.TestCase):
         actual = rerank(loaded, ground, satellite, global_scores, config, "cpu")
         self.assertEqual(actual["ranks"], expected["ranks"])
         self.assertEqual(actual["top1_ids"], expected["top1_ids"])
+        self.assertEqual(actual['local_weight'], 0.4)
+        torch.testing.assert_close(torch.tensor(actual['beta']), torch.full((10,), 0.4))
+        chosen = torch.tensor([[satellite.lookup[value] for value in row] for row in actual['candidate_ids']])
+        torch.testing.assert_close(torch.tensor(actual['global_scores']),
+                                   global_scores[torch.arange(10)[:, None], chosen])
         fixed = rerank(loaded, ground, satellite, global_scores, config, "cpu", fixed_beta=0.4)
         self.assertEqual(fixed_fusion_metrics(actual, ground, satellite, global_scores, 0.4), fixed["metrics"])
 
@@ -200,19 +214,20 @@ class PartialMatchingTests(unittest.TestCase):
         config = small_configuration()
         config["mixed_precision"] = False
         model = LocalMatcher(config)
-        model.checkpointing = False
+        self.assertTrue(model.checkpointing)
         ground, satellite = feature_cache("ground"), feature_cache("satellite")
         scores = ground.global_features @ satellite.global_features.T
         optimizer = create_local_optimizer(model, config)
         scheduler = get_cosine_schedule_with_warmup(optimizer, 1, 3)
         scaler = torch.cuda.amp.GradScaler(enabled=False)
-        root = EXPERIMENT.parents[1] / ".local-cache"
+        root = EXPERIMENT / ".local-cache"
+        root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=root, prefix="partial-check-") as directory:
             output = Path(directory).resolve()
             self.assertTrue(output.is_relative_to(root.resolve()))
             with IsolatedRandomState():
                 rows, step = train_local_epoch(model, (ground, satellite), {"scores": scores},
-                    [0, 1, 2, 3, 4, 5], torch.tensor(5.0), config, optimizer, scheduler, scaler,
+                    [0, 1, 2, 3, 4, 5], config, optimizer, scheduler, scaler,
                     epoch=1, step=0, output=output)
             self.assertEqual(step, 2)
             self.assertEqual(len(rows), 2)
@@ -221,22 +236,79 @@ class PartialMatchingTests(unittest.TestCase):
             audit = json.loads((output / "local_candidates_epoch_1.json").read_text(encoding="utf-8"))
             self.assertEqual(audit["query_ids"], [0, 1, 2, 3, 4, 5])
             self.assertEqual(len(audit["local_parameter_sha256"]), 64)
+            self.assertEqual(audit['refresh'], 'batch')
+            self.assertEqual(len(audit['batches']), 2)
+            self.assertEqual([batch['local_step_before_update'] for batch in audit['batches']], [0, 1])
+            self.assertEqual([value for batch in audit['batches'] for value in batch['query_ids']], audit['query_ids'])
+            for batch in audit['batches']:
+                self.assertEqual(len(batch['ground_candidates']), len(batch['query_ids']))
+                self.assertEqual(len(batch['satellite_candidates']), len(batch['query_ids']))
             self.assertTrue(all(torch.isfinite(torch.tensor(row["loss"])) for row in rows))
+            for row in rows:
+                self.assertEqual(row['local_loss_temperature'], 0.07)
+                self.assertEqual(row['fusion_loss_temperature'], 0.05)
+                for direction in ('ground', 'satellite'):
+                    self.assertAlmostEqual(row[direction]['beta_mean'], 0.4, places=6)
 
     def test_local_loss_still_trains_when_positive_is_outside_fusion_candidates(self):
         config = small_configuration()
         model = LocalMatcher(config)
         model.checkpointing = False
         ground, satellite = feature_cache("ground"), feature_cache("satellite")
-        local_lists = torch.tensor([[index, (index + 1) % 10, (index + 2) % 10, (index + 3) % 10]
-                                    for index in range(10)])
         fusion_lists = torch.tensor([[(index + offset) % 10 for offset in range(1, 7)] for index in range(10)])
         scores = ground.global_features @ satellite.global_features.T
-        local, fusion, info = direction_losses(model, ground, satellite, [0, 1], local_lists, fusion_lists,
-                                               scores, torch.tensor(5.0), config, "cpu")
+        local, fusion, info = direction_losses(model, ground, satellite, [0, 1], fusion_lists,
+                                               scores, config, "cpu", random.Random(42))
         self.assertEqual(float(fusion.detach()), 0)
         self.assertEqual(info["valid_fusion_queries"], 0)
         local.backward()
+        self.assertGreater(float(model.projection3.weight.grad.abs().sum()), 0)
+
+    def test_current_batch_scores_refresh_hard_candidates_without_changing_global_rng(self):
+        config = small_configuration()
+        ground, satellite = feature_cache('ground'), feature_cache('satellite')
+        top = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        first = torch.tensor([[0.1, 0.9, 0.8, 0.3, 0.2, 0.1]])
+        second = torch.tensor([[0.1, 0.9, 0.2, 0.3, 0.8, 0.1]])
+        state = random.getstate()
+        left = mine_local_candidates(ground, satellite, [0], top, first, config, random.Random(42))
+        right = mine_local_candidates(ground, satellite, [0], top, second, config, random.Random(42))
+        self.assertEqual(left[0, :3].tolist(), [0, 1, 2])
+        self.assertEqual(right[0, :3].tolist(), [0, 1, 4])
+        self.assertEqual(int(left[0, 3]), int(right[0, 3]))
+        self.assertNotIn(int(left[0, 3]), top[0].tolist())
+        self.assertEqual(random.getstate(), state)
+
+    def test_independent_temperatures_and_reused_score_gradients_match_direct_losses(self):
+        config = small_configuration()
+        model = LocalMatcher(config)
+        model.checkpointing = False
+        ground, satellite = feature_cache('ground'), feature_cache('satellite')
+        global_scores = (ground.global_features @ satellite.global_features.T).requires_grad_()
+        top = ranked_candidates(global_scores.detach(), satellite.ids, config['rerank_candidates'])
+        local, fusion, info = direction_losses(model, ground, satellite, [0, 1, 2], top,
+                                               global_scores, config, 'cpu', random.Random(42))
+        parameters = tuple(model.parameters())
+        actual_gradients = torch.autograd.grad(local + fusion, parameters, retain_graph=True, allow_unused=True)
+        selected = torch.arange(3)
+        local_candidates = torch.tensor([[satellite.lookup[value] for value in row] for row in info['candidate_ids']])
+        local_scores, _, _ = score_candidates(model, ground, satellite, selected, local_candidates, 'cpu')
+        expected_local = F.cross_entropy(local_scores / 0.07, torch.zeros(3, dtype=torch.long), label_smoothing=0.1)
+        scores, _, _ = score_candidates(model, ground, satellite, selected, top[selected], 'cpu')
+        matches = satellite.ids[top[selected]] == ground.ids[selected, None]
+        valid = matches.any(1)
+        fused, _ = model.fuse(global_scores[selected[valid, None], top[selected][valid]], scores[valid])
+        expected_fusion = F.cross_entropy(fused / 0.05, matches[valid].long().argmax(1), label_smoothing=0.1)
+        torch.testing.assert_close(local, expected_local)
+        torch.testing.assert_close(fusion, expected_fusion)
+        expected_gradients = torch.autograd.grad(expected_local + expected_fusion, parameters, allow_unused=True)
+        for actual, expected in zip(actual_gradients, expected_gradients):
+            if actual is None:
+                self.assertIsNone(expected)
+            else:
+                torch.testing.assert_close(actual, expected, rtol=2e-3, atol=2e-4)
+        (local + fusion).backward()
+        self.assertIsNone(global_scores.grad)
         self.assertGreater(float(model.projection3.weight.grad.abs().sum()), 0)
 
 

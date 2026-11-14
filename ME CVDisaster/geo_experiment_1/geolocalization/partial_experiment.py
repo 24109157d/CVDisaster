@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import random
 from pathlib import Path
 import sys
 import time
@@ -14,9 +15,9 @@ from transformers import get_cosine_schedule_with_warmup
 
 from . import REPOSITORY
 from .data import make_datasets, make_loaders, shuffle_training
-from .local_cache import IsolatedRandomState, predict_cached
+from .local_cache import IsolatedRandomState, predict_cached, ranked_candidates
 from .local_matching import LocalMatcher, create_local_optimizer
-from .local_retrieval import direction_losses, fixed_fusion_metrics, mine_local_candidates, rerank
+from .local_retrieval import direction_losses, rerank
 from .runtime import environment, initialize, new_output, require_compute_node, sha256, write_json
 from sample4geo.evaluate.cvusa_and_cvact import calculate_nearest, calculate_scores
 from sample4geo.loss import InfoNCE
@@ -47,7 +48,7 @@ def reproduction_configuration(config):
             raise ValueError(f"原 geo 配置与新实验声明不一致: {name}")
     if Path(original.data_folder).resolve() != Path(config["data_root"]).resolve():
         raise ValueError("原 geo 数据目录与新实验不一致")
-    if config["scheme"] != "geo_partial_match_gate" or config["local_query_batch_size"] != original.batch_size:
+    if config["scheme"] != "geo_partial_match_fixed" or config["local_query_batch_size"] != original.batch_size:
         raise ValueError("实验编号或新增模块查询 batch 错误")
     if config["rerank_candidates"] < 2 + config["global_hard_count"] + config["local_hard_count"]:
         raise ValueError("局部候选范围不足")
@@ -59,6 +60,11 @@ def reproduction_configuration(config):
         raise ValueError("原 geo 的 AdamW 参数必须保持复现值")
     if set(config["loss_weights"]) != {"local", "fusion"}:
         raise ValueError("新增模块损失必须包含 local 和 fusion")
+    if config["local_candidate_refresh"] != "batch":
+        raise ValueError("局部困难候选必须在每个 batch 重新选择")
+    for name in ("local_loss_temperature", "fusion_loss_temperature"):
+        if not math.isfinite(config[name]) or config[name] <= 0:
+            raise ValueError(f"新增损失温度必须为有限正数: {name}")
     return original
 
 
@@ -91,7 +97,7 @@ def cpu_state(model):
 
 def save_checkpoint(path, global_model, local_model, config, manifest, epoch, global_step, local_step, metrics,
                     global_only=False):
-    saved = {"architecture": "geo_partial_match_gate", "config": config, "split_manifest": manifest,
+    saved = {"architecture": "geo_partial_match_fixed", "config": config, "split_manifest": manifest,
              "epoch": epoch, "global_step": global_step, "local_step": local_step,
              "global": cpu_state(global_model.module), "metrics": metrics, "global_only": global_only}
     if not global_only:
@@ -99,20 +105,21 @@ def save_checkpoint(path, global_model, local_model, config, manifest, epoch, gl
     torch.save(saved, path)
 
 
-def train_local_epoch(model, caches, global_result, sample_ids, scale, config, optimizer, scheduler, scaler,
+def train_local_epoch(model, caches, global_result, sample_ids, config, optimizer, scheduler, scaler,
                       epoch, step, output):
     device = next(model.parameters()).device
     ground, satellite = caches
     scores = global_result["scores"]
-    g_lists, g_top = mine_local_candidates(model, ground, satellite, scores, config, device, config["seed"] + 2 * epoch)
-    s_lists, s_top = mine_local_candidates(model, satellite, ground, scores.T, config, device, config["seed"] + 2 * epoch + 1)
+    g_top = ranked_candidates(scores, satellite.ids, config["rerank_candidates"])
+    s_top = ranked_candidates(scores.T, ground.ids, config["rerank_candidates"])
+    g_seed, s_seed = config["seed"] + 2 * epoch, config["seed"] + 2 * epoch + 1
+    g_rng, s_rng = random.Random(g_seed), random.Random(s_seed)
     ground_indices = ground.indices(sample_ids)
     satellite_indices = satellite.indices(sample_ids)
-    write_json(output / f"local_candidates_epoch_{epoch}.json", {
+    audit = {
         "context": ground.context, "query_ids": sample_ids,
         "local_parameter_sha256": model_fingerprint(model),
-        "ground_candidates": satellite.ids[g_lists[ground_indices]].tolist(),
-        "satellite_candidates": ground.ids[s_lists[satellite_indices]].tolist()})
+        "refresh": "batch", "random_seeds": {"ground": g_seed, "satellite": s_seed}, "batches": []}
     model.train()
     rows = []
     for start in range(0, len(sample_ids), config["local_query_batch_size"]):
@@ -120,11 +127,14 @@ def train_local_epoch(model, caches, global_result, sample_ids, scale, config, o
         optimizer.zero_grad(set_to_none=True)
         with autocast(enabled=config["mixed_precision"]):
             g_local, g_fusion, g_info = direction_losses(model, ground, satellite, ground_indices[start:stop],
-                g_lists, g_top, scores, scale, config, device)
+                g_top, scores, config, device, g_rng)
             s_local, s_fusion, s_info = direction_losses(model, satellite, ground, satellite_indices[start:stop],
-                s_lists, s_top, scores.T, scale, config, device)
+                s_top, scores.T, config, device, s_rng)
             local_loss, fusion_loss = (g_local + s_local) / 2, (g_fusion + s_fusion) / 2
             total = config["loss_weights"]["local"] * local_loss + config["loss_weights"]["fusion"] * fusion_loss
+        audit["batches"].append({"local_step_before_update": step, "query_ids": sample_ids[start:stop],
+                                 "ground_candidates": g_info.pop("candidate_ids"),
+                                 "satellite_candidates": s_info.pop("candidate_ids")})
         rates = {group["name"]: group["lr"] for group in optimizer.param_groups}
         previous_scale = scaler.get_scale()
         scaler.scale(total).backward()
@@ -138,6 +148,8 @@ def train_local_epoch(model, caches, global_result, sample_ids, scale, config, o
         row = {"epoch": epoch, "step": step, "loss": float(total.detach()),
                "local_loss": float(local_loss.detach()), "fusion_loss": float(fusion_loss.detach()),
                "learning_rates": rates, "grad_scaler": scaler.get_scale(),
+               "local_loss_temperature": config["local_loss_temperature"],
+               "fusion_loss_temperature": config["fusion_loss_temperature"],
                "updated": scaler.get_scale() >= previous_scale, "ground": g_info, "satellite": s_info,
                "transport_max_row_error": float(diagnostics[:, 0].max()),
                "transport_max_column_error": float(diagnostics[:, 1].max()),
@@ -152,6 +164,7 @@ def train_local_epoch(model, caches, global_result, sample_ids, scale, config, o
         with (output / "local_steps.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
         print(json.dumps(row, ensure_ascii=False, allow_nan=False), flush=True)
+    write_json(output / f"local_candidates_epoch_{epoch}.json", audit)
     return rows, step
 
 
@@ -233,7 +246,7 @@ def run_training(config, output):
         before = model_fingerprint(model)
         with IsolatedRandomState():
             local_rows, local_step = train_local_epoch(local_model, (train_g, train_s), train_result, sample_ids,
-                model.logit_scale.exp().detach(), config, local_optimizer, local_scheduler, local_scaler,
+                config, local_optimizer, local_scheduler, local_scaler,
                 epoch, local_step, output)
             result = rerank(local_model, test_g, test_s, test_result["scores"], config, original.device)
         if model_fingerprint(model) != before:
@@ -268,19 +281,23 @@ def run_training(config, output):
         expected = json.loads((output / "best_queries.json").read_text(encoding="utf-8"))
         if result["ranks"] != expected["ranks"] or result["metrics"] != expected["metrics"]:
             raise AssertionError("best_fusion 保存加载后排名不一致")
-        fixed = {str(beta): fixed_fusion_metrics(result, g, s, global_result["scores"], beta)
-                 for beta in (0.3, 0.4)}
     write_json(output / "result.json", {"metrics": result["metrics"], "global_metrics": global_result["metrics"],
         "baseline_metrics": config["baseline_metrics"],
         "difference_percentage_points": {key: value - config["baseline_metrics"][key]
                                          for key, value in result["metrics"].items()},
-        "best_global_score": best_global, "best_fusion_epoch": saved["epoch"], "fixed_fusion_metrics": fixed,
+        "best_global_score": best_global, "best_fusion_epoch": saved["epoch"],
+        "fusion_mode": "fixed", "local_weight": config["local_weight"],
+        "local_loss_temperature": config["local_loss_temperature"],
+        "fusion_loss_temperature": config["fusion_loss_temperature"],
+        "local_candidate_refresh": config["local_candidate_refresh"],
         "repaired": result["repaired"], "harmed": result["harmed"], "global_top20_recall": result["global_topk_recall"],
         "checkpoint_reload_verified": True, "best_fusion_sha256": sha256(output / "best_fusion.pth")})
 
 
 def run_evaluation(checkpoint_path, output):
     saved = torch.load(checkpoint_path, map_location="cpu")
+    if saved["architecture"] != "geo_partial_match_fixed":
+        raise ValueError("checkpoint 结构与固定比例实验不一致")
     config = saved["config"]
     original = reproduction_configuration(config)
     initialize(config["seed"])
@@ -306,13 +323,16 @@ def run_evaluation(checkpoint_path, output):
         g, s, global_result, _ = cached_global_evaluation(original, global_model, make_loaders(datasets, config),
                                                         "test", sha256(checkpoint_path), config)
         result = rerank(local_model, g, s, global_result["scores"], config, original.device)
-    write_json(output / "result.json", {"ids": g.ids.tolist(), "global_metrics": global_result["metrics"], **result})
+    write_json(output / "result.json", {"ids": g.ids.tolist(), "global_metrics": global_result["metrics"],
+        "fusion_mode": "fixed", "local_loss_temperature": config["local_loss_temperature"],
+        "fusion_loss_temperature": config["fusion_loss_temperature"],
+        "local_candidate_refresh": config["local_candidate_refresh"], **result})
 
 
 def main():
-    parser = argparse.ArgumentParser(description="全局训练与局部候选判断独立的 geo 实验")
+    parser = argparse.ArgumentParser(description="固定比例融合的 geo 局部候选判断实验")
     parser.add_argument("--mode", choices=("train", "evaluate"), default="train")
-    parser.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "configs" / "geo_partial_match_gate.json"))
+    parser.add_argument("--config", default=str(Path(__file__).resolve().parents[1] / "configs" / "geo_partial_match_fixed40.json"))
     parser.add_argument("--output", required=True)
     parser.add_argument("--checkpoint")
     args = parser.parse_args()

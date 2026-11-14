@@ -1,4 +1,4 @@
-import random
+import math
 
 import torch
 from torch.nn import functional as F
@@ -25,22 +25,16 @@ def score_candidates(model, query, reference, query_indices, candidates, device)
 
 
 @torch.no_grad()
-def mine_local_candidates(model, query, reference, global_scores, config, device, seed):
-    model.eval()
-    k = config["rerank_candidates"]
-    top = ranked_candidates(global_scores, reference.ids, k)
-    local = []
-    for start in range(0, len(query.ids), config["local_query_batch_size"]):
-        selected = torch.arange(start, min(start + config["local_query_batch_size"], len(query.ids)))
-        scores, _, _ = score_candidates(model, query, reference, selected, top[selected], device)
-        local.append(scores.cpu())
-    local = torch.cat(local)
-    rng = random.Random(seed)
+def mine_local_candidates(query, reference, indices, candidates, local_scores, config, rng):
+    indices = torch.as_tensor(indices, dtype=torch.long)
+    if candidates.shape != local_scores.shape or len(candidates) != len(indices):
+        raise ValueError("当前 batch 的候选与局部分数形状错误")
+    local_order = local_scores.detach().float().cpu().argsort(dim=1, descending=True, stable=True)
     result = []
-    for index, query_id in enumerate(query.ids.tolist()):
+    for row, query_id in enumerate(query.ids[indices].tolist()):
         correct = reference.lookup[query_id]
         selected = [correct]
-        global_order = top[index].tolist()
+        global_order = candidates[row].tolist()
         if config["global_hard_count"]:
             for candidate in global_order:
                 if candidate not in selected:
@@ -49,7 +43,7 @@ def mine_local_candidates(model, query, reference, global_scores, config, device
                     break
         target = len(selected) + config["local_hard_count"]
         if config["local_hard_count"]:
-            for position in local[index].argsort(descending=True, stable=True).tolist():
+            for position in local_order[row].tolist():
                 candidate = global_order[position]
                 if candidate not in selected:
                     selected.append(candidate)
@@ -63,36 +57,46 @@ def mine_local_candidates(model, query, reference, global_scores, config, device
         if len(set(selected)) != len(selected):
             raise AssertionError("局部训练候选存在重复")
         result.append(selected)
-    return torch.tensor(result, dtype=torch.long), top
+    return torch.tensor(result, dtype=torch.long)
 
 
-def direction_losses(model, query, reference, indices, local_candidates, fusion_candidates,
-                     global_scores, scale, config, device):
+def direction_losses(model, query, reference, indices, fusion_candidates, global_scores, config, device, rng):
+    temperatures = (config["local_loss_temperature"], config["fusion_loss_temperature"])
+    if any(not math.isfinite(value) or value <= 0 for value in temperatures):
+        raise ValueError("新增损失温度必须为有限正数")
     selected = torch.as_tensor(indices, dtype=torch.long)
-    local_scores, _, diagnostics = score_candidates(model, query, reference, selected,
-                                                     local_candidates[selected], device)
-    labels = torch.zeros(len(selected), dtype=torch.long, device=device)
-    scale = scale.detach().float()
-    local_loss = F.cross_entropy(scale * local_scores, labels, label_smoothing=config["label_smoothing"])
     candidates = fusion_candidates[selected]
+    scores, _, diagnostics = score_candidates(model, query, reference, selected, candidates, device)
+    local_candidates = mine_local_candidates(query, reference, selected, candidates, scores, config, rng)
+    positions = local_candidates[:, :, None] == candidates[:, None, :]
+    contained = positions.any(2)
+    local_scores = scores.gather(1, positions.long().argmax(2).to(device))
+    extra_rows, extra_columns = (~contained).nonzero(as_tuple=True)
+    if len(extra_rows):
+        extra_candidates = local_candidates[extra_rows, extra_columns, None]
+        extra_scores, _, extra_diagnostics = score_candidates(
+            model, query, reference, selected[extra_rows], extra_candidates, device)
+        local_scores[extra_rows.to(device), extra_columns.to(device)] = extra_scores.flatten()
+        diagnostics = torch.cat((diagnostics, extra_diagnostics))
+    labels = torch.zeros(len(selected), dtype=torch.long, device=device)
+    local_loss = F.cross_entropy(local_scores / temperatures[0], labels, label_smoothing=config["label_smoothing"])
     correct_ids = query.ids[selected]
     reference_ids = reference.ids[candidates]
     matches = reference_ids == correct_ids[:, None]
     valid = matches.any(1)
     if valid.any():
-        valid_indices, candidates = selected[valid], candidates[valid]
-        scores, statistics, more_diagnostics = score_candidates(model, query, reference, valid_indices, candidates, device)
-        g_scores = global_scores[valid_indices[:, None], candidates].to(device)
-        fused, beta = model.fuse(g_scores, scores, statistics)
+        valid_indices = selected[valid]
+        g_scores = global_scores[valid_indices[:, None], candidates[valid]].to(device)
+        fused, beta = model.fuse(g_scores, scores[valid.to(device)])
         targets = matches[valid].long().argmax(1).to(device)
-        fusion_loss = F.cross_entropy(scale * fused, targets, label_smoothing=config["label_smoothing"])
-        diagnostics = torch.cat((diagnostics, more_diagnostics))
+        fusion_loss = F.cross_entropy(fused / temperatures[1], targets, label_smoothing=config["label_smoothing"])
         beta_mean = float(beta.detach().mean())
     else:
         fusion_loss = local_scores.sum() * 0
         beta_mean = None
     return local_loss, fusion_loss, {"valid_fusion_queries": int(valid.sum()), "queries": len(selected),
-                                      "beta_mean": beta_mean, "diagnostics": diagnostics.detach().cpu()}
+                                      "beta_mean": beta_mean, "diagnostics": diagnostics.detach().cpu(),
+                                      "candidate_ids": reference.ids[local_candidates].tolist()}
 
 
 def recall_from_ranks(ranks, gallery_size):
@@ -102,6 +106,8 @@ def recall_from_ranks(ranks, gallery_size):
 
 @torch.no_grad()
 def rerank(model, query, reference, global_scores, config, device, fixed_beta=None):
+    if fixed_beta is not None and not 0 <= fixed_beta <= 1:
+        raise ValueError("固定局部比例超出范围")
     model.eval()
     candidates = ranked_candidates(global_scores, reference.ids, config["rerank_candidates"])
     ranks, betas, local_ranks, winners, statistics, diagnostics, cached_scores, ties = [], [], [], [], [], [], [], []
@@ -111,7 +117,7 @@ def rerank(model, query, reference, global_scores, config, device, fixed_beta=No
         scores, evidence, transport = score_candidates(model, query, reference, indices, chosen, device)
         g = global_scores[indices[:, None], chosen].to(device)
         if fixed_beta is None:
-            fused, beta = model.fuse(g, scores, evidence)
+            fused, beta = model.fuse(g, scores)
         else:
             beta = scores.new_full((len(indices),), fixed_beta)
             fused = (1 - beta[:, None]) * g + beta[:, None] * scores
@@ -149,7 +155,9 @@ def rerank(model, query, reference, global_scores, config, device, fixed_beta=No
             "global_topk_recall": float(contained.double().mean() * 100),
             "conditional_local_accuracy": sum(conditional) / len(conditional) * 100 if conditional else None,
             "statistics": torch.cat(statistics).tolist(), "transport": torch.cat(diagnostics).tolist(),
-            "local_scores": torch.cat(cached_scores).tolist()}
+            "local_scores": torch.cat(cached_scores).tolist(),
+            "global_scores": global_scores[torch.arange(len(query.ids))[:, None], candidates].tolist(),
+            "local_weight": model.local_weight if fixed_beta is None else fixed_beta}
 
 
 def fixed_fusion_metrics(result, query, reference, global_scores, beta):

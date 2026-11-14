@@ -7,8 +7,8 @@
 #SBATCH --gres=gpu:2
 #SBATCH --mem=60000M
 #SBATCH --time=1-00:00:00
-#SBATCH --job-name=geo-partial-match
-#SBATCH --output=/scratch/liuzeyu/heyinxi/logs/geo-partial-match-%j.log
+#SBATCH --job-name=geo-partial-fixed40
+#SBATCH --output=/scratch/liuzeyu/heyinxi/logs/geo-partial-fixed40-%j.log
 
 set -euo pipefail
 export PYTHONNOUSERSITE=1
@@ -27,7 +27,7 @@ export PATH="$GEO_ENV/bin:$PATH"
 export LD_LIBRARY_PATH="$GEO_ENV/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 MODE=${CVDISASTER_MODE:-train}
 case "$MODE" in train|evaluate) ;; *) exit 2 ;; esac
-RUN=/scratch/liuzeyu/heyinxi/runs/geo_partial_match_gate-${MODE}-${SLURM_JOB_ID}
+RUN=/scratch/liuzeyu/heyinxi/runs/geo_partial_match_fixed40-${MODE}-${SLURM_JOB_ID}
 mkdir "$RUN"
 mkdir "$RUN/source"
 git -C "$REPO" archive "$COMMIT" 'ME CVDisaster/geo_experiment_1' 'Author CVDisaster/geolocalization' | tar -x -C "$RUN/source"
@@ -37,5 +37,5 @@ if [ "$MODE" = evaluate ]; then
     CHECKPOINT=${CVDISASTER_CHECKPOINT:?评价必须指定完整 checkpoint}
     python -u train_partial.py --mode evaluate --checkpoint "$CHECKPOINT" --output "$RUN/output"
 else
-    python -u train_partial.py --mode train --config configs/geo_partial_match_gate.json --output "$RUN/output"
+    python -u train_partial.py --mode train --config configs/geo_partial_match_fixed40.json --output "$RUN/output"
 fi

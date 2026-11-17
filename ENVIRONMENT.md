@@ -12,7 +12,8 @@
 | --- | --- | --- | --- |
 | 作者原实验：跨视角定位 Geoloc | `Author CVDisaster/geolocalization/` | `requirements.txt` | `0_prepare_splits_and_data.py`、`1_train_cvdisaster.py`、`2_eval_cvdisaster.py` |
 | 作者原实验：灾损分类 Est | `Author CVDisaster/disaster_perception_mapping/` | `requirements-est.txt` | `1_svi.py`、`1_sat.py`、`2_cv.py`、`3_estimation.py` |
-| 自己的复现与改进 | `ME CVDisaster/` | 按实验记录 | `scripts/reproduction/`、`scripts/experiments/` |
+| Geo改进实验 | `ME CVDisaster/geo_experiment_1/` | 按实验记录 | `train_partial.py`、`scripts/experiments/` |
+| Geo与Est串联实验 | `ME CVDisaster/combined_experiment_1/` | 定位与分类分别使用上述环境 | `scripts/submit_pipeline.sh`、`运行记录.md` |
 
 作者原有的 `Author CVDisaster/geolocalization/requirement.txt` 保留作来源参考；本项目后续以根目录 `requirements.txt` 为定位实验的安装入口。新增依赖来自代码导入：定位预处理使用 `geopandas` 和 Pillow，图像加载及变换使用 OpenCV；分类辅助脚本使用 `geojson`、`rasterio`、`filetype`。作者 README 为分类实验使用 TensorFlow 2.10.1 GPU 容器，当前清单记录该版本基线，但未验证改用 Conda 环境后的 GPU 兼容性。
 

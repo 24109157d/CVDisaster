@@ -1,0 +1,4 @@
+# 保留归档结果的原始字节及SHA256。
+"ME CVDisaster/combined_experiment_1/results/**" -text whitespace=cr-at-eol
+"ME CVDisaster/geo_experiment_1/results/**" -text whitespace=cr-at-eol
+"ME CVDisaster/geo_experiment_1/docs/diagnostics/**/*.csv" -text whitespace=cr-at-eol

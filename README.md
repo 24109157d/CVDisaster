@@ -1,5 +1,16 @@
 # CVDisaster
 
+本仓库包含作者代码复现、Geo改进实验和Geo→Est串联实验。研究代码与实验说明见 [ME CVDisaster](ME%20CVDisaster/README.md)。
+
+| 查看内容 | 入口 |
+|---|---|
+| Geo改进实验：结构、训练设置与结果 | [geo_experiment_1](ME%20CVDisaster/geo_experiment_1/README.md) |
+| Geo首次成功改进的汇报材料 | [对比清单与流程图](ME%20CVDisaster/geo_experiment_1/docs/首次成功改进汇报.md) |
+| Geo与Est共享划分、分别训练、测试串联 | [combined_experiment_1](ME%20CVDisaster/combined_experiment_1/README.md) |
+| 串联实验完成结果与CPU检查 | [运行记录](ME%20CVDisaster/combined_experiment_1/运行记录.md) |
+
+全部代码变更使用“本地修改与检查 → Git提交 → 推送GitHub → 超算拉取”的流程。计算作业从明确的Git提交提取源码并记录提交号，提交作业需要用户授权。数据集、模型权重、依赖环境和大型缓存保存在超算。
+
 ## Cross-View Geolocalization and Disaster Mapping with Street-View and VHR Satellite Imagery: A Case Study of Hurricane IAN
 Authors: Li, Hao, Deuser, Fabian, Yin, Wenping, Luo, Xuanshu, Walther, Paul, Mai, Gengchen, Huang, Wei and Werner, Martin
 

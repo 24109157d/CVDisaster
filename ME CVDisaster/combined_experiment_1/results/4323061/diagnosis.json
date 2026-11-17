@@ -1,0 +1,294 @@
+{
+  "run": "/scratch/liuzeyu/heyinxi/runs/combined-experiment-1-4308780",
+  "checkpoint_sha256": "358d045939d64b76aefe6164a267dd5516c579728bad4e900ab39ca2da315812",
+  "source_sha256": {
+    "est.py": "f31c9379eaf0ba78e1275a8f8a2b30f27d268495a7f76f00bad5e773062c31da",
+    "estimate.py": "83ba85920b528f21f2d25c257fdcb1f53e9594980d8f2ce803e42e9b15f784e7"
+  },
+  "split_sha256": {
+    "train_60.csv": "53286cb98749755f7e04d1b8b2b4a64a00331389ea75dff6d1a99b5d99378ccd",
+    "val_60.csv": "f37b6f4e18f001d1b2e46be92fd819275ac6c45581ec3eca30adf7c08d88548d"
+  },
+  "input_count": 333,
+  "changed_tensor_count": 333,
+  "probability_max_abs_change": {
+    "min": 1.1920928955078125e-07,
+    "median": 0.00012853741645812988,
+    "mean": 0.00021074908421418208,
+    "max": 0.003961622714996338
+  },
+  "original_class_margin": {
+    "min": 0.0032257437705993652,
+    "median": 0.4568525552749634,
+    "mean": 0.48895991181804155,
+    "max": 0.9998719964714837
+  },
+  "class_margin_change_bound": {
+    "min": 1.870066625997424e-07,
+    "median": 0.00023287534713745117,
+    "mean": 0.00039452234688707886,
+    "max": 0.007864177227020264
+  },
+  "class_margin_change_over_original": {
+    "min": 1.870656564413074e-07,
+    "median": 0.0006747733289134134,
+    "mean": 0.003723019789582336,
+    "max": 0.1438939440908842
+  },
+  "parameter_update_steps": 0,
+  "inference_device": "CPU",
+  "selected": [
+    {
+      "sample_id": "276571304896433",
+      "ground_tensor_equal": true,
+      "satellite_tensor_equal": false,
+      "saved_paired_probability": [
+        0.6103724837303162,
+        0.3848765194416046,
+        0.004750970285385847
+      ],
+      "saved_combined_probability": [
+        0.6064108610153198,
+        0.38877907395362854,
+        0.004810112528502941
+      ],
+      "replay_paired_probability": [
+        0.6108548641204834,
+        0.3843992352485657,
+        0.0047458685003221035
+      ],
+      "replay_combined_probability": [
+        0.6068776845932007,
+        0.3883186876773834,
+        0.0048036230728030205
+      ],
+      "cpu_vs_saved_gpu_paired_max_abs_difference": 0.00048238039016723633,
+      "cpu_vs_saved_gpu_combined_max_abs_difference": 0.0004668235778808594,
+      "svi_feature_l2": 7.2083892822265625,
+      "paired_sat_feature_l2": 5.090428829193115,
+      "satellite_feature_change_l2": 0.3671416938304901,
+      "satellite_feature_change_relative": 0.0721239224076271,
+      "svi_hidden_contribution_l2": 4.437213897705078,
+      "paired_sat_hidden_contribution_l2": 1.7632040977478027,
+      "satellite_hidden_change_l2": 0.11436716467142105,
+      "paired_logits": [
+        1.5333164930343628,
+        1.070138692855835,
+        -3.324270486831665
+      ],
+      "combined_logits": [
+        1.523482084274292,
+        1.0769810676574707,
+        -3.3154752254486084
+      ],
+      "original_logit_margin": 0.46317780017852783,
+      "max_logit_change": 0.0098344087600708
+    },
+    {
+      "sample_id": "282866187467310",
+      "ground_tensor_equal": true,
+      "satellite_tensor_equal": false,
+      "saved_paired_probability": [
+        0.007018489763140678,
+        0.21459631621837616,
+        0.7783851623535156
+      ],
+      "saved_combined_probability": [
+        0.007056666072458029,
+        0.2131188064813614,
+        0.7798244953155518
+      ],
+      "replay_paired_probability": [
+        0.00701340613886714,
+        0.21453888714313507,
+        0.7784477472305298
+      ],
+      "replay_combined_probability": [
+        0.007050488609820604,
+        0.2130444347858429,
+        0.7799050211906433
+      ],
+      "cpu_vs_saved_gpu_paired_max_abs_difference": 6.258487701416016e-05,
+      "cpu_vs_saved_gpu_combined_max_abs_difference": 8.052587509155273e-05,
+      "svi_feature_l2": 6.2751545906066895,
+      "paired_sat_feature_l2": 5.024417877197266,
+      "satellite_feature_change_l2": 0.4240885376930237,
+      "satellite_feature_change_relative": 0.08440550416707993,
+      "svi_hidden_contribution_l2": 3.8962607383728027,
+      "paired_sat_hidden_contribution_l2": 1.7272344827651978,
+      "satellite_hidden_change_l2": 0.14533200860023499,
+      "paired_logits": [
+        -2.678079128265381,
+        0.7425897717475891,
+        2.0314009189605713
+      ],
+      "combined_logits": [
+        -2.676893472671509,
+        0.7315097451210022,
+        2.0291807651519775
+      ],
+      "original_logit_margin": 1.288811206817627,
+      "max_logit_change": 0.011080026626586914
+    },
+    {
+      "sample_id": "472890894854907",
+      "ground_tensor_equal": true,
+      "satellite_tensor_equal": false,
+      "saved_paired_probability": [
+        0.030165845528244972,
+        0.4421343505382538,
+        0.5276997685432434
+      ],
+      "saved_combined_probability": [
+        0.030161164700984955,
+        0.4426727592945099,
+        0.5271660685539246
+      ],
+      "replay_paired_probability": [
+        0.030112795531749725,
+        0.44170650839805603,
+        0.5281805992126465
+      ],
+      "replay_combined_probability": [
+        0.030108481645584106,
+        0.44223663210868835,
+        0.5276548862457275
+      ],
+      "cpu_vs_saved_gpu_paired_max_abs_difference": 0.00048083066940307617,
+      "cpu_vs_saved_gpu_combined_max_abs_difference": 0.0004888176918029785,
+      "svi_feature_l2": 5.813323497772217,
+      "paired_sat_feature_l2": 5.049440860748291,
+      "satellite_feature_change_l2": 0.05633862689137459,
+      "satellite_feature_change_relative": 0.011157399043440819,
+      "svi_hidden_contribution_l2": 2.9773595333099365,
+      "paired_sat_hidden_contribution_l2": 1.7361382246017456,
+      "satellite_hidden_change_l2": 0.01891194097697735,
+      "paired_logits": [
+        -1.8488823175430298,
+        0.836813747882843,
+        1.01560640335083
+      ],
+      "combined_logits": [
+        -1.8497898578643799,
+        0.8372476100921631,
+        1.0138448476791382
+      ],
+      "original_logit_margin": 0.17879265546798706,
+      "max_logit_change": 0.0017615556716918945
+    },
+    {
+      "sample_id": "158080983299265",
+      "ground_tensor_equal": true,
+      "satellite_tensor_equal": false,
+      "saved_paired_probability": [
+        0.03117513656616211,
+        0.48609524965286255,
+        0.48272958397865295
+      ],
+      "saved_combined_probability": [
+        0.03123297356069088,
+        0.48621752858161926,
+        0.4825495183467865
+      ],
+      "replay_paired_probability": [
+        0.031138859689235687,
+        0.4858640432357788,
+        0.48299703001976013
+      ],
+      "replay_combined_probability": [
+        0.031193573027849197,
+        0.4859905540943146,
+        0.4828158915042877
+      ],
+      "cpu_vs_saved_gpu_paired_max_abs_difference": 0.00026744604110717773,
+      "cpu_vs_saved_gpu_combined_max_abs_difference": 0.0002663731575012207,
+      "svi_feature_l2": 6.11247444152832,
+      "paired_sat_feature_l2": 5.048553466796875,
+      "satellite_feature_change_l2": 0.03894016146659851,
+      "satellite_feature_change_relative": 0.0077131325379014015,
+      "svi_hidden_contribution_l2": 3.0949432849884033,
+      "paired_sat_hidden_contribution_l2": 1.7379834651947021,
+      "satellite_hidden_change_l2": 0.011644518002867699,
+      "paired_logits": [
+        -1.8990418910980225,
+        0.8484313488006592,
+        0.8425130248069763
+      ],
+      "combined_logits": [
+        -1.8991957902908325,
+        0.8467819690704346,
+        0.8402281999588013
+      ],
+      "original_logit_margin": 0.005918323993682861,
+      "max_logit_change": 0.002284824848175049
+    },
+    {
+      "sample_id": "252858700802936",
+      "ground_tensor_equal": true,
+      "satellite_tensor_equal": false,
+      "saved_paired_probability": [
+        0.2211914360523224,
+        0.36505433917045593,
+        0.41375428438186646
+      ],
+      "saved_combined_probability": [
+        0.22082768380641937,
+        0.36503544449806213,
+        0.4141369163990021
+      ],
+      "replay_paired_probability": [
+        0.22135980427265167,
+        0.36517101526260376,
+        0.4134691655635834
+      ],
+      "replay_combined_probability": [
+        0.2210163176059723,
+        0.3651539981365204,
+        0.4138296842575073
+      ],
+      "cpu_vs_saved_gpu_paired_max_abs_difference": 0.00028511881828308105,
+      "cpu_vs_saved_gpu_combined_max_abs_difference": 0.000307232141494751,
+      "svi_feature_l2": 5.120083332061768,
+      "paired_sat_feature_l2": 5.039090633392334,
+      "satellite_feature_change_l2": 0.025886477902531624,
+      "satellite_feature_change_relative": 0.0051371329464018345,
+      "svi_hidden_contribution_l2": 1.9298447370529175,
+      "paired_sat_hidden_contribution_l2": 1.7336082458496094,
+      "satellite_hidden_change_l2": 0.00821943674236536,
+      "paired_logits": [
+        -0.31163397431373596,
+        0.1889421045780182,
+        0.31315943598747253
+      ],
+      "combined_logits": [
+        -0.31295549869537354,
+        0.18912672996520996,
+        0.3142620623111725
+      ],
+      "original_logit_margin": 0.12421733140945435,
+      "max_logit_change": 0.0013215243816375732
+    }
+  ],
+  "branches": {
+    "svi": {
+      "trainable": true,
+      "trainable_parameter_count": 27708974,
+      "pretrained_parameter_change_l2": 3.1393280582019183,
+      "pretrained_parameter_change_relative": 0.00478545703393496
+    },
+    "sat": {
+      "trainable": true,
+      "trainable_parameter_count": 27708974,
+      "pretrained_parameter_change_l2": 0.9997407810159534,
+      "pretrained_parameter_change_relative": 0.0015239619638110179
+    }
+  },
+  "head": {
+    "input_width": 1024,
+    "svi_feature_width": 512,
+    "sat_feature_width": 512,
+    "svi_kernel_l2": 7.841329574584961,
+    "sat_kernel_l2": 7.701037406921387,
+    "sat_nonzero_weights": 32768
+  }
+}

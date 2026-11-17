@@ -5,6 +5,9 @@
 /dataset/
 /ME CVDisaster/train_results/raw/
 /ME CVDisaster/test_results/raw/
+/ME CVDisaster/geo_experiment_1/train_results/raw/
+/ME CVDisaster/geo_experiment_1/test_results/raw/
+/ME CVDisaster/combined_experiment_1/output/
 
 # 原始影像和其他本地数据目录
 /geolocalization/data/

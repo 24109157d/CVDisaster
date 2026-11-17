@@ -1,0 +1,602 @@
+{
+  "scheme": "geo_partial_match_fixed",
+  "config": {
+    "scheme": "geo_partial_match_fixed",
+    "data_root": "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN",
+    "cvusa_checkpoint": "/scratch/liuzeyu/heyinxi/pretrained/weights_e40_98.6830.pth",
+    "cvusa_sha256": "739cf00d303836fba1195f1bb8d54c4b13c53926ce3212fc9ceced335fc59a23",
+    "baseline_job": "3979539",
+    "baseline_commit": "8ca60d598d2c306930b1b61d80c098ece846efeb",
+    "baseline_metrics": {
+      "R@1": 79.805942995755,
+      "R@5": 97.81685870224378,
+      "R@10": 98.96907216494846,
+      "R@1%": 99.51485748938751
+    },
+    "seed": 42,
+    "module_init_seed": 42,
+    "epochs": 10,
+    "batch_size": 64,
+    "batch_size_eval": 128,
+    "num_workers": 4,
+    "lr": 0.0005,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "label_smoothing": 0.1,
+    "clip_grad": 100.0,
+    "warmup_epochs": 1,
+    "mixed_precision": true,
+    "grad_scaler_init": 1024.0,
+    "prob_flip": 0.5,
+    "prob_rotate": 0.75,
+    "neighbour_select": 64,
+    "neighbour_range": 128,
+    "local_dimension": 128,
+    "attention_heads": 4,
+    "attention_blocks": 2,
+    "ffn_hidden": 256,
+    "pair_group_size": 16,
+    "activation_checkpointing": true,
+    "local_query_batch_size": 64,
+    "rerank_candidates": 20,
+    "global_hard_count": 4,
+    "local_hard_count": 4,
+    "random_negative_count": 3,
+    "local_candidate_refresh": "batch",
+    "local_loss_temperature": 0.07,
+    "fusion_loss_temperature": 0.05,
+    "local_lr": 0.0005,
+    "local_weight": 0.4,
+    "loss_weights": {
+      "local": 0.5,
+      "fusion": 0.5
+    },
+    "match_temperature": 0.1,
+    "sinkhorn_iterations": 30,
+    "sinkhorn_max_iterations": 500,
+    "sinkhorn_check_interval": 10,
+    "sinkhorn_tolerance": 0.001
+  },
+  "environment": {
+    "commit": "591f31003f01977beb6c21e6ee6163d8b56ea81f",
+    "python": "3.10.22 (main, Oct  1 2026, 20:14:04) [GCC 14.3.0]",
+    "platform": "Linux-5.14.0-427.42.1.el9_4.x86_64-x86_64-with-glibc2.34",
+    "packages": {
+      "tqdm": "4.70.1",
+      "numpy": "1.26.4",
+      "shapely": "2.1.2",
+      "scikit-image": "0.24.0",
+      "pyogrio": "0.13.0",
+      "typing_extensions": "4.16.0",
+      "torchvision": "0.14.1+cu116",
+      "pandas": "2.3.3",
+      "python-dateutil": "3.0.0",
+      "rich": "15.0.0",
+      "simsimd": "6.5.16",
+      "truststore": "0.10.5",
+      "cloudpickle": "3.1.2",
+      "setuptools": "84.0.0",
+      "safetensors": "0.8.0",
+      "timm": "0.8.19.dev0",
+      "charset-normalizer": "3.5.2",
+      "fsspec": "2026.9.0",
+      "tokenizers": "0.13.3",
+      "lazy-loader": "0.6",
+      "shellingham": "1.5.4",
+      "mdurl": "0.1.2",
+      "markdown-it-py": "4.2.0",
+      "pyproj": "3.7.1",
+      "idna": "3.20",
+      "joblib": "1.6.0",
+      "geopandas": "1.1.4",
+      "torch": "1.13.1+cu116",
+      "hf-xet": "1.5.0",
+      "tifffile": "2025.5.10",
+      "huggingface_hub": "0.36.2",
+      "transformers": "4.27.0",
+      "six": "1.17.0",
+      "PyYAML": "6.0.3",
+      "scikit-learn": "1.2.1",
+      "networkx": "3.4.2",
+      "threadpoolctl": "3.7.0",
+      "ImageIO": "2.38.0",
+      "tzdata": "2026.5",
+      "requests": "2.34.2",
+      "pytz": "2026.5",
+      "click": "8.5.0",
+      "certifi": "2026.10.23",
+      "scipy": "1.10.0",
+      "regex": "2026.9.29",
+      "qudida": "0.0.4",
+      "albumentations": "1.3.0",
+      "wheel": "0.48.0",
+      "Pygments": "2.21.0",
+      "pip": "26.2.2",
+      "tomli": "2.5.0",
+      "packaging": "26.3",
+      "urllib3": "2.8.0",
+      "pillow": "12.3.0",
+      "filelock": "4.1.0",
+      "opencv-python-headless": "4.11.0.86"
+    },
+    "cuda": "11.6",
+    "cudnn": 8302,
+    "gpus": [
+      "NVIDIA A100-SXM4-40GB",
+      "NVIDIA A100-SXM4-40GB"
+    ],
+    "job_id": "4316915",
+    "node": "g0177",
+    "argv": [
+      "train_partial.py",
+      "--mode",
+      "train",
+      "--config",
+      "configs/geo_partial_match_fixed40.json",
+      "--output",
+      "/scratch/liuzeyu/heyinxi/runs/geo_partial_match_fixed40-train-4316915/output"
+    ],
+    "slurm_script": null
+  },
+  "backend": {
+    "seed": 42,
+    "cudnn_benchmark": false,
+    "cudnn_deterministic": false,
+    "cudnn_allow_tf32": true,
+    "matmul_allow_tf32": false,
+    "deterministic_algorithms": false
+  },
+  "split_manifest": {
+    "data_root": "/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN",
+    "splits": {
+      "train_60.csv": {
+        "rows": 2472,
+        "sha256": "53286cb98749755f7e04d1b8b2b4a64a00331389ea75dff6d1a99b5d99378ccd"
+      },
+      "val_60.csv": {
+        "rows": 1649,
+        "sha256": "f37b6f4e18f001d1b2e46be92fd819275ac6c45581ec3eca30adf7c08d88548d"
+      }
+    }
+  },
+  "transforms": {
+    "satellite_train": {
+      "__version__": "1.3.0",
+      "transform": {
+        "__class_fullname__": "Compose",
+        "p": 1.0,
+        "transforms": [
+          {
+            "__class_fullname__": "ImageCompression",
+            "always_apply": false,
+            "p": 0.5,
+            "quality_lower": 90,
+            "quality_upper": 100,
+            "compression_type": 0
+          },
+          {
+            "__class_fullname__": "Resize",
+            "always_apply": false,
+            "p": 1.0,
+            "height": 384,
+            "width": 384,
+            "interpolation": 5
+          },
+          {
+            "__class_fullname__": "ColorJitter",
+            "always_apply": false,
+            "p": 0.5,
+            "brightness": [
+              0.85,
+              1.15
+            ],
+            "contrast": [
+              0.85,
+              1.15
+            ],
+            "saturation": [
+              0.85,
+              1.15
+            ],
+            "hue": [
+              -0.15,
+              0.15
+            ]
+          },
+          {
+            "__class_fullname__": "OneOf",
+            "p": 0.3,
+            "transforms": [
+              {
+                "__class_fullname__": "AdvancedBlur",
+                "always_apply": false,
+                "p": 1.0,
+                "blur_limit": [
+                  3,
+                  7
+                ],
+                "sigmaX_limit": [
+                  0.2,
+                  1.0
+                ],
+                "sigmaY_limit": [
+                  0.2,
+                  1.0
+                ],
+                "rotate_limit": [
+                  -90,
+                  90
+                ],
+                "beta_limit": [
+                  0.5,
+                  8.0
+                ],
+                "noise_limit": [
+                  0.9,
+                  1.1
+                ]
+              },
+              {
+                "__class_fullname__": "Sharpen",
+                "always_apply": false,
+                "p": 1.0,
+                "alpha": [
+                  0.2,
+                  0.5
+                ],
+                "lightness": [
+                  0.5,
+                  1.0
+                ]
+              }
+            ]
+          },
+          {
+            "__class_fullname__": "OneOf",
+            "p": 0.3,
+            "transforms": [
+              {
+                "__class_fullname__": "GridDropout",
+                "always_apply": false,
+                "p": 1.0,
+                "ratio": 0.4,
+                "unit_size_min": null,
+                "unit_size_max": null,
+                "holes_number_x": null,
+                "holes_number_y": null,
+                "shift_x": 0,
+                "shift_y": 0,
+                "random_offset": false,
+                "fill_value": 0,
+                "mask_fill_value": null
+              },
+              {
+                "__class_fullname__": "CoarseDropout",
+                "always_apply": false,
+                "p": 1.0,
+                "max_holes": 25,
+                "max_height": 76,
+                "max_width": 76,
+                "min_holes": 10,
+                "min_height": 38,
+                "min_width": 38,
+                "fill_value": 0,
+                "mask_fill_value": null
+              }
+            ]
+          },
+          {
+            "__class_fullname__": "Normalize",
+            "always_apply": false,
+            "p": 1.0,
+            "mean": [
+              0.485,
+              0.456,
+              0.406
+            ],
+            "std": [
+              0.229,
+              0.224,
+              0.225
+            ],
+            "max_pixel_value": 255.0
+          },
+          {
+            "__class_fullname__": "ToTensorV2",
+            "always_apply": true,
+            "p": 1.0,
+            "transpose_mask": false
+          }
+        ],
+        "bbox_params": null,
+        "keypoint_params": null,
+        "additional_targets": {}
+      }
+    },
+    "ground_train": {
+      "__version__": "1.3.0",
+      "transform": {
+        "__class_fullname__": "Compose",
+        "p": 1.0,
+        "transforms": [
+          {
+            "__class_fullname__": "geolocalization.data.RecordedCut",
+            "always_apply": false,
+            "p": 1.0,
+            "cutting": 0
+          },
+          {
+            "__class_fullname__": "ImageCompression",
+            "always_apply": false,
+            "p": 0.5,
+            "quality_lower": 90,
+            "quality_upper": 100,
+            "compression_type": 0
+          },
+          {
+            "__class_fullname__": "Resize",
+            "always_apply": false,
+            "p": 1.0,
+            "height": 140,
+            "width": 768,
+            "interpolation": 5
+          },
+          {
+            "__class_fullname__": "ColorJitter",
+            "always_apply": false,
+            "p": 0.5,
+            "brightness": [
+              0.85,
+              1.15
+            ],
+            "contrast": [
+              0.85,
+              1.15
+            ],
+            "saturation": [
+              0.85,
+              1.15
+            ],
+            "hue": [
+              -0.15,
+              0.15
+            ]
+          },
+          {
+            "__class_fullname__": "OneOf",
+            "p": 0.3,
+            "transforms": [
+              {
+                "__class_fullname__": "AdvancedBlur",
+                "always_apply": false,
+                "p": 1.0,
+                "blur_limit": [
+                  3,
+                  7
+                ],
+                "sigmaX_limit": [
+                  0.2,
+                  1.0
+                ],
+                "sigmaY_limit": [
+                  0.2,
+                  1.0
+                ],
+                "rotate_limit": [
+                  -90,
+                  90
+                ],
+                "beta_limit": [
+                  0.5,
+                  8.0
+                ],
+                "noise_limit": [
+                  0.9,
+                  1.1
+                ]
+              },
+              {
+                "__class_fullname__": "Sharpen",
+                "always_apply": false,
+                "p": 1.0,
+                "alpha": [
+                  0.2,
+                  0.5
+                ],
+                "lightness": [
+                  0.5,
+                  1.0
+                ]
+              }
+            ]
+          },
+          {
+            "__class_fullname__": "OneOf",
+            "p": 0.3,
+            "transforms": [
+              {
+                "__class_fullname__": "GridDropout",
+                "always_apply": false,
+                "p": 1.0,
+                "ratio": 0.5,
+                "unit_size_min": null,
+                "unit_size_max": null,
+                "holes_number_x": null,
+                "holes_number_y": null,
+                "shift_x": 0,
+                "shift_y": 0,
+                "random_offset": false,
+                "fill_value": 0,
+                "mask_fill_value": null
+              },
+              {
+                "__class_fullname__": "CoarseDropout",
+                "always_apply": false,
+                "p": 1.0,
+                "max_holes": 25,
+                "max_height": 28,
+                "max_width": 28,
+                "min_holes": 10,
+                "min_height": 14,
+                "min_width": 14,
+                "fill_value": 0,
+                "mask_fill_value": null
+              }
+            ]
+          },
+          {
+            "__class_fullname__": "Normalize",
+            "always_apply": false,
+            "p": 1.0,
+            "mean": [
+              0.485,
+              0.456,
+              0.406
+            ],
+            "std": [
+              0.229,
+              0.224,
+              0.225
+            ],
+            "max_pixel_value": 255.0
+          },
+          {
+            "__class_fullname__": "ToTensorV2",
+            "always_apply": true,
+            "p": 1.0,
+            "transpose_mask": false
+          }
+        ],
+        "bbox_params": null,
+        "keypoint_params": null,
+        "additional_targets": {}
+      }
+    },
+    "satellite_eval": {
+      "__version__": "1.3.0",
+      "transform": {
+        "__class_fullname__": "Compose",
+        "p": 1.0,
+        "transforms": [
+          {
+            "__class_fullname__": "Resize",
+            "always_apply": false,
+            "p": 1.0,
+            "height": 384,
+            "width": 384,
+            "interpolation": 5
+          },
+          {
+            "__class_fullname__": "Normalize",
+            "always_apply": false,
+            "p": 1.0,
+            "mean": [
+              0.485,
+              0.456,
+              0.406
+            ],
+            "std": [
+              0.229,
+              0.224,
+              0.225
+            ],
+            "max_pixel_value": 255.0
+          },
+          {
+            "__class_fullname__": "ToTensorV2",
+            "always_apply": true,
+            "p": 1.0,
+            "transpose_mask": false
+          }
+        ],
+        "bbox_params": null,
+        "keypoint_params": null,
+        "additional_targets": {}
+      }
+    },
+    "ground_eval": {
+      "__version__": "1.3.0",
+      "transform": {
+        "__class_fullname__": "Compose",
+        "p": 1.0,
+        "transforms": [
+          {
+            "__class_fullname__": "geolocalization.data.RecordedCut",
+            "always_apply": false,
+            "p": 1.0,
+            "cutting": 0
+          },
+          {
+            "__class_fullname__": "Resize",
+            "always_apply": false,
+            "p": 1.0,
+            "height": 140,
+            "width": 768,
+            "interpolation": 5
+          },
+          {
+            "__class_fullname__": "Normalize",
+            "always_apply": false,
+            "p": 1.0,
+            "mean": [
+              0.485,
+              0.456,
+              0.406
+            ],
+            "std": [
+              0.229,
+              0.224,
+              0.225
+            ],
+            "max_pixel_value": 255.0
+          },
+          {
+            "__class_fullname__": "ToTensorV2",
+            "always_apply": true,
+            "p": 1.0,
+            "transpose_mask": false
+          }
+        ],
+        "bbox_params": null,
+        "keypoint_params": null,
+        "additional_targets": {}
+      }
+    },
+    "ground_crop_train": [
+      160,
+      350
+    ],
+    "ground_crop_eval": [
+      160,
+      360
+    ]
+  },
+  "scheduler": {
+    "warmup_steps": 39,
+    "schedule_steps": 390
+  },
+  "global_model_structure": "TimmModel(\n  (model): ConvNeXt(\n    (stem): Sequential(\n      (0): Conv2d(3, 128, kernel_size=(4, 4), stride=(4, 4))\n      (1): LayerNorm2d((128,), eps=1e-06, elementwise_affine=True)\n    )\n    (stages): Sequential(\n      (0): ConvNeXtStage(\n        (downsample): Identity()\n        (blocks): Sequential(\n          (0): ConvNeXtBlock(\n            (conv_dw): Conv2d(128, 128, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=128)\n            (norm): LayerNorm((128,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=128, out_features=512, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=512, out_features=128, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (1): ConvNeXtBlock(\n            (conv_dw): Conv2d(128, 128, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=128)\n            (norm): LayerNorm((128,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=128, out_features=512, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=512, out_features=128, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (2): ConvNeXtBlock(\n            (conv_dw): Conv2d(128, 128, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=128)\n            (norm): LayerNorm((128,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=128, out_features=512, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=512, out_features=128, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n        )\n      )\n      (1): ConvNeXtStage(\n        (downsample): Sequential(\n          (0): LayerNorm2d((128,), eps=1e-06, elementwise_affine=True)\n          (1): Conv2d(128, 256, kernel_size=(2, 2), stride=(2, 2))\n        )\n        (blocks): Sequential(\n          (0): ConvNeXtBlock(\n            (conv_dw): Conv2d(256, 256, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=256)\n            (norm): LayerNorm((256,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=256, out_features=1024, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=1024, out_features=256, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (1): ConvNeXtBlock(\n            (conv_dw): Conv2d(256, 256, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=256)\n            (norm): LayerNorm((256,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=256, out_features=1024, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=1024, out_features=256, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (2): ConvNeXtBlock(\n            (conv_dw): Conv2d(256, 256, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=256)\n            (norm): LayerNorm((256,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=256, out_features=1024, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=1024, out_features=256, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n        )\n      )\n      (2): ConvNeXtStage(\n        (downsample): Sequential(\n          (0): LayerNorm2d((256,), eps=1e-06, elementwise_affine=True)\n          (1): Conv2d(256, 512, kernel_size=(2, 2), stride=(2, 2))\n        )\n        (blocks): Sequential(\n          (0): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (1): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (2): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (3): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (4): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (5): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (6): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (7): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (8): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (9): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (10): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (11): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (12): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (13): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (14): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (15): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (16): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (17): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (18): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (19): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (20): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (21): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (22): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (23): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (24): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (25): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (26): ConvNeXtBlock(\n            (conv_dw): Conv2d(512, 512, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=512)\n            (norm): LayerNorm((512,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=512, out_features=2048, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=2048, out_features=512, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n        )\n      )\n      (3): ConvNeXtStage(\n        (downsample): Sequential(\n          (0): LayerNorm2d((512,), eps=1e-06, elementwise_affine=True)\n          (1): Conv2d(512, 1024, kernel_size=(2, 2), stride=(2, 2))\n        )\n        (blocks): Sequential(\n          (0): ConvNeXtBlock(\n            (conv_dw): Conv2d(1024, 1024, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=1024)\n            (norm): LayerNorm((1024,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=1024, out_features=4096, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=4096, out_features=1024, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (1): ConvNeXtBlock(\n            (conv_dw): Conv2d(1024, 1024, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=1024)\n            (norm): LayerNorm((1024,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=1024, out_features=4096, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=4096, out_features=1024, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n          (2): ConvNeXtBlock(\n            (conv_dw): Conv2d(1024, 1024, kernel_size=(7, 7), stride=(1, 1), padding=(3, 3), groups=1024)\n            (norm): LayerNorm((1024,), eps=1e-06, elementwise_affine=True)\n            (mlp): Mlp(\n              (fc1): Linear(in_features=1024, out_features=4096, bias=True)\n              (act): GELU()\n              (drop1): Dropout(p=0.0, inplace=False)\n              (norm): Identity()\n              (fc2): Linear(in_features=4096, out_features=1024, bias=True)\n              (drop2): Dropout(p=0.0, inplace=False)\n            )\n            (shortcut): Identity()\n            (drop_path): Identity()\n          )\n        )\n      )\n    )\n    (norm_pre): Identity()\n    (head): NormMlpClassifierHead(\n      (global_pool): SelectAdaptivePool2d (pool_type=avg, flatten=Identity())\n      (norm): LayerNorm2d((1024,), eps=1e-06, elementwise_affine=True)\n      (flatten): Flatten(start_dim=1, end_dim=-1)\n      (pre_logits): Identity()\n      (drop): Dropout(p=0.0, inplace=False)\n      (fc): Identity()\n    )\n  )\n)",
+  "initial_global_sha256": "c6c99469787b642d9f4e20ce95ece0b31969387f361efd9fd1e4bf005718f4f6",
+  "global_source_sha256": {
+    "1_train_cvdisaster.py": "b9b818cad0a4e10fa138a047394fe0a14dcf27118a3d47b3472257d615705a59",
+    "sample4geo/model.py": "0ee59818ac968e399ff5db2fb3e7b0b1109ea70d24773c42b7c7dbf6e754b578",
+    "sample4geo/trainer.py": "15ad48a4e1881aa40f6fea948d923d5265150a012fc713abd0109983fcc3fae6",
+    "sample4geo/loss.py": "e593dec6ebe726203a7b097cdd9e411cf4358f6caa13eed1776eb492cfee122d"
+  },
+  "initial_global_test": {
+    "R@1": 15.767131594906003,
+    "R@5": 24.25712553062462,
+    "R@10": 28.987265009096426,
+    "R@1%": 32.201334141904184
+  },
+  "initial_global_train": {
+    "R@1": 14.846278317152104,
+    "R@5": 22.572815533980584,
+    "R@10": 26.45631067961165,
+    "R@1%": 32.5242718446602
+  }
+}

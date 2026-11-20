@@ -66,7 +66,7 @@ Gaussian Noise 使用固定随机种子，裁切前均值 127.5、标准差 `sqr
 - `validation_cases.py`、`verify_model.py`：真实训练图片的模型检查入口。
 - `tests/`：真实元数据和历史预测的检查。
 - `docs/运行说明.md`、`docs/本机检查记录.md`：命令与验证范围。
-- `scripts/`：作业定义文件，使用时需要用户授权。
+- `scripts/`：资产准备、双 GPU 模型检查、五种子训练数组及统一统计定义，提交作业需要用户授权。
 - `.local-cache/`：固定本机清单、历史诊断、依赖及测试缓存，已由 Git 忽略。
 
 ## 实现依据

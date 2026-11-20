@@ -18,44 +18,37 @@ def main():
     parser.add_argument('--config', type=Path, default=ROOT / 'config.json')
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--seeds', nargs='+', type=int)
     parser.add_argument('--gpus', type=int, choices=(0, 2), default=2)
     parser.add_argument('--geo-predictions', type=Path)
-    parser.add_argument('--defer-statistics', action='store_true', help='分折作业完成后统一合并统计')
     args = parser.parse_args()
     require_compute_node()
     settings = configuration(args.config)
     check_manifest_settings(settings, load_manifest(args.manifest))
     output = new_directory(args.output)
-    seeds = args.seeds if args.seeds is not None else settings['seeds']
-    if len(set(seeds)) != len(seeds):
-        raise ValueError('训练种子不能重复')
-    runs = {}
+    seed = settings['seed']
     variant = 'full'
-    for seed in seeds:
-        directory = new_directory(output / variant / str(seed))
-        config = directory / 'config.json'
-        write_json(config, settings)
-        selected = directory / 'select'
-        execute('train.py', '--config', config, '--manifest', args.manifest, '--output', selected,
-                '--variant', variant, '--seed', seed, '--stage', 'select', '--gpus', args.gpus)
-        refit = directory / 'refit'
-        execute('train.py', '--config', config, '--manifest', args.manifest, '--output', refit,
-                '--variant', variant, '--seed', seed, '--stage', 'refit', '--gpus', args.gpus,
-                '--selection-run', selected)
-        evaluation = directory / 'evaluation'
-        extra = ['--geo-predictions', args.geo_predictions] if args.geo_predictions else []
-        execute('evaluate.py', '--run', refit, '--manifest', args.manifest, '--output', evaluation,
-                '--gpus', args.gpus, *extra)
-        runs.setdefault(variant, []).append(str(evaluation / 'predictions.csv'))
-        write_json(output / 'runs.json', runs, replace=True)
-    if not args.defer_statistics:
-        specification = output / 'comparisons.json'
-        write_json(specification, {'comparisons': primary_comparisons(runs)})
-        execute('analysis.py', '--comparisons', specification, '--output', output / 'statistics',
-                '--group', 'spatial_group' if read_json(args.manifest / 'manifest.json')[
-                    'spatial_independence'] else 'sequence',
-                '--repetitions', settings['bootstrap_repetitions'])
+    directory = new_directory(output / variant / str(seed))
+    config = directory / 'config.json'
+    write_json(config, settings)
+    selected = directory / 'select'
+    execute('train.py', '--config', config, '--manifest', args.manifest, '--output', selected,
+            '--variant', variant, '--seed', seed, '--stage', 'select', '--gpus', args.gpus)
+    refit = directory / 'refit'
+    execute('train.py', '--config', config, '--manifest', args.manifest, '--output', refit,
+            '--variant', variant, '--seed', seed, '--stage', 'refit', '--gpus', args.gpus,
+            '--selection-run', selected)
+    evaluation = directory / 'evaluation'
+    extra = ['--geo-predictions', args.geo_predictions] if args.geo_predictions else []
+    execute('evaluate.py', '--run', refit, '--manifest', args.manifest, '--output', evaluation,
+            '--gpus', args.gpus, *extra)
+    runs = {variant: [str(evaluation / 'predictions.csv')]}
+    write_json(output / 'runs.json', runs)
+    specification = output / 'comparisons.json'
+    write_json(specification, {'comparisons': primary_comparisons(runs)})
+    execute('analysis.py', '--comparisons', specification, '--output', output / 'statistics',
+            '--group', 'spatial_group' if read_json(args.manifest / 'manifest.json')[
+                'spatial_independence'] else 'sequence',
+            '--repetitions', settings['bootstrap_repetitions'])
 
 
 if __name__ == '__main__':

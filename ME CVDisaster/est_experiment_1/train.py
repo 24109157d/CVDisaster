@@ -27,6 +27,8 @@ def main():
     args = parser.parse_args()
     require_compute_node()
     settings = configuration(args.config)
+    if args.seed != settings['seed']:
+        raise ValueError('训练种子与实验配置不一致')
     manifest = load_manifest(args.manifest)
     check_manifest_settings(settings, manifest)
     strategy = configure_devices(args.gpus)

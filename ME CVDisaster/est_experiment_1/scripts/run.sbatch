@@ -7,18 +7,19 @@
 #SBATCH --gres=gpu:2
 #SBATCH --mem=60000M
 #SBATCH --time=5-00:00:00
-#SBATCH --array=0-4%1
 #SBATCH --job-name=est_experiment_1
-#SBATCH --output=/scratch/liuzeyu/heyinxi/logs/est-experiment-1-%A_%a.log
+#SBATCH --output=/scratch/liuzeyu/heyinxi/logs/est-experiment-1-%j.log
 
 set -euo pipefail
 REPO=/scratch/liuzeyu/heyinxi/CVDisaster
 ENV=/scratch/liuzeyu/anaconda3/envs/cvdisaster_est
 COMMIT=${CVDISASTER_COMMIT:?必须提供已同步的代码提交号}
-MANIFEST=${CVDISASTER_EST_MANIFEST:?必须提供已核验的固定清单目录}
+DATA=/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN
+REFERENCE="$REPO/../runs/est-4087311/Author CVDisaster/disaster_perception_mapping"
 export CVDISASTER_COMMIT
 CVDISASTER_COMMIT=$(git -C "$REPO" rev-parse "${COMMIT}^{commit}")
-RUN=/scratch/liuzeyu/heyinxi/runs/est-experiment-1-${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}
+RUN=/scratch/liuzeyu/heyinxi/runs/est-experiment-1-${SLURM_JOB_ID}
+MANIFEST="$RUN/manifest"
 mkdir "$RUN"
 mkdir "$RUN/source"
 mkdir "$RUN/cache"
@@ -37,9 +38,15 @@ export TF_NUM_INTRAOP_THREADS=8
 export TF_NUM_INTEROP_THREADS=2
 export PATH="$ENV/bin:$PATH"
 export LD_LIBRARY_PATH="$ENV/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export PYTHONPATH="$REPO/ME CVDisaster/est_experiment_1/.local-cache/dependencies${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$RUN/cache/dependencies${PYTHONPATH:+:$PYTHONPATH}"
 cd "$RUN/source/ME CVDisaster/est_experiment_1"
 nvidia-smi
+ASSETS="$REPO/ME CVDisaster/est_experiment_1/.local-cache"
+sha256sum --check "$ASSETS/wheels/SHA256SUMS"
+"$ENV/bin/python" -m pip install --no-index --no-deps --target "$RUN/cache/dependencies" "$ASSETS/wheels/"pyproj-3.6.1-*.whl
+"$ENV/bin/python" -c "import pyproj; assert pyproj.__version__ == '3.6.1', pyproj.__version__"
 "$ENV/bin/python" -m pip check
-SEED=$("$ENV/bin/python" -c 'import os; from common import configuration; print(configuration()["seeds"][int(os.environ["SLURM_ARRAY_TASK_ID"])])')
-"$ENV/bin/python" pipeline.py --manifest "$MANIFEST" --output "$RUN/output" --seeds "$SEED" --defer-statistics "$@"
+"$ENV/bin/python" prepare.py --metadata "$DATA/02_Position/CVIAN_position.geojson" --est-train "$REFERENCE/est_train_60.csv" --est-test "$REFERENCE/est_test_60.csv" --est-config "$REFERENCE/est_config.json" --output "$MANIFEST"
+"$ENV/bin/python" validation_cases.py --manifest "$MANIFEST" --data-root "$DATA" --weights /scratch/liuzeyu/heyinxi/pretrained/keras/models/convnext_tiny_notop.h5 --output "$RUN/cases.json"
+"$ENV/bin/python" verify_model.py --cases "$RUN/cases.json" --variant full --output "$RUN/verification" --gpus 2
+"$ENV/bin/python" pipeline.py --manifest "$MANIFEST" --output "$RUN/output" --gpus 2

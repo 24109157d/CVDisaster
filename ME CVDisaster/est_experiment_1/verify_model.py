@@ -64,7 +64,7 @@ def main():
     if sha256(cases['weights']) != settings['initial_sha256']:
         raise ValueError('真实预训练权重指纹不一致')
     strategy = configure_devices(args.gpus)
-    tf.keras.utils.set_random_seed(42)
+    tf.keras.utils.set_random_seed(settings['seed'])
     with strategy.scope():
         functional = build_model(settings, args.variant)
         model = AccumulatingModel(functional, samples=len(cases['targets']))

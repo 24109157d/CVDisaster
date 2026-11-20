@@ -67,6 +67,8 @@ def new_directory(path):
 
 def configuration(path=ROOT / 'config.json'):
     value = read_json(path)
+    if value['seed'] != 626:
+        raise ValueError('当前 EST 实验的训练种子必须为 626')
     if (value['split_protocol'] != 'est626' or value['split_seed'] != 626
             or value['train_ratio'] != 0.6 or value['validation_seed'] != 626
             or value['validation_fraction'] != 0.2):

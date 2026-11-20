@@ -27,7 +27,7 @@ Base 使用当前街景及卫星调制特征。Base 与 Final 共享 `Dense(64) 
 
 - SGD，momentum=0；学习率 0.01，从 0.001 预热 10 个 optimizer steps，随后使用以 200 epochs 为总目标的 cosine 调度。
 - 有效 batch size 为 12，每个设备逐样本累计梯度，最后一个 batch 保留全部样本。
-- 训练随机种子为 42、626、2024、2025、2026，五次训练使用同一份数据清单。外部划分种子与内部验证划分种子均为 626。
+- 训练随机种子、外部划分种子与内部验证划分种子均为 626。
 - 联合损失为 `CE(Final) + 0.3 CE(Base) + 0.2 Lord(Final) + 0.1 CE(Satellite)`。
 - `Lord = 0.5 * sum_k w[k] * (sum_{c<=k} p[c] - 1[y<=k])²`，k 为 0、1，默认分界权重为 `[1,1]`。权重只允许依据独立验证集合选择。
 - 邻图要求同一 Sequence、距离不超过 50 米、时间间隔不超过 60 秒，最多两张，允许时间之前与之后的观察。
@@ -52,7 +52,7 @@ Gaussian Noise 使用固定随机种子，裁切前均值 127.5、标准差 `sqr
 - `delta_N = Nfixed - Ncorrupted`。
 - `net_benefit_pp = 100 * delta_N / N`。
 
-`analysis.py` 使用配对 Sequence 或空间分组，输出差值、95% bootstrap 区间、分组置换检验和同族 Holm 校正。默认比较包含正确卫星下的 Final/Base 净收益，以及正确卫星分别相对四种替换条件的差值。五个训练种子的相同目标不会作为五倍独立目标。
+`analysis.py` 使用配对 Sequence，输出差值、95% bootstrap 区间、分组置换检验和同族 Holm 校正。默认比较包含正确卫星下的 Final/Base 净收益，以及正确卫星分别相对四种替换条件的差值。区间反映目标分组的重采样变化。
 
 卫星替换差值衡量同权重模型的输入敏感性。模型性能提升与卫星贡献的论文结论，还需要使用统一数据、训练和评价规则的相应对照结果。本实验当前只提供所选模型的代码。
 
@@ -61,12 +61,13 @@ Gaussian Noise 使用固定随机种子，裁切前均值 127.5、标准差 `sqr
 - `config.json`：输入尺寸、预训练权重路径及全部训练参数。
 - `models.py`：编码器、新融合、共享分类 Head、损失及调度。
 - `prepare.py`、`dataset.py`、`conditions.py`：固定划分、邻图和评价输入。
-- `train.py`、`training.py`、`pipeline.py`：验证选择、重训、续训和多种子执行。
+- `train.py`、`training.py`、`pipeline.py`：seed=626 的验证选择、重训、续训、评价及统计。
 - `evaluate.py`、`analysis.py`：完整评价与配对统计。
 - `validation_cases.py`、`verify_model.py`：真实训练图片的模型检查入口。
 - `tests/`：真实元数据和历史预测的检查。
 - `docs/运行说明.md`、`docs/本机检查记录.md`：命令与验证范围。
-- `scripts/`：资产准备、双 GPU 模型检查、五种子训练数组及统一统计定义，提交作业需要用户授权。
+- `scripts/prepare_assets.sh`：准备官方权重及离线依赖。
+- `scripts/run.sbatch`：唯一作业入口，在同一个 GPU 作业内完成真实模型检查、训练、评价及统计，提交需要用户授权。
 - `.local-cache/`：固定本机清单、历史诊断、依赖及测试缓存，已由 Git 忽略。
 
 ## 实现依据

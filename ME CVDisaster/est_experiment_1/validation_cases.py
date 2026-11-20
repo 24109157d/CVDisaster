@@ -1,10 +1,11 @@
 import argparse
 from pathlib import Path
 
-from common import read_csv, write_json
+from common import check_manifest_settings, configuration, load_manifest, read_csv, sha256, write_json
 
 
 def cases_from_manifest(manifest, data_root, weights):
+    check_manifest_settings(configuration(), load_manifest(manifest))
     rows = read_csv(Path(manifest) / 'train.csv')
     lookup = {item['sample_id']: item for item in rows}
     adjacent = read_csv(Path(manifest) / 'train_neighbors.csv')
@@ -21,6 +22,7 @@ def cases_from_manifest(manifest, data_root, weights):
     for item in chosen:
         ids.update(neighbors[item['sample_id']])
     return {'data_root': str(data_root), 'weights': str(weights), 'targets': chosen,
+            'manifest': str(Path(manifest).resolve()), 'manifest_sha256': sha256(Path(manifest) / 'manifest.json'),
             'neighbors': {item['sample_id']: neighbors[item['sample_id']] for item in chosen},
             'samples': {key: lookup[key] for key in ids}}
 

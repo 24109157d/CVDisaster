@@ -1,12 +1,14 @@
 import argparse
 import math
 from pathlib import Path
+import time
 
 import numpy as np
 import tensorflow as tf
 
-from common import ROOT, configuration, image_path, new_directory, read_json, sha256, write_json
-from dataset import noise_image, wrong_permutation
+from common import (check_manifest_settings, configuration, image_path, load_manifest, new_directory,
+                    read_json, sha256, write_json)
+from dataset import make_dataset, noise_image
 from evaluate import parameter_fingerprint
 from models import ClassificationLoss, VARIANTS, build_model, compile_model, policy
 from training import AccumulatingModel, Checkpoints, configure_devices
@@ -54,6 +56,9 @@ def main():
     args = parser.parse_args()
     cases = read_json(args.cases)
     settings = configuration()
+    check_manifest_settings(settings, load_manifest(cases['manifest']))
+    if sha256(Path(cases['manifest']) / 'manifest.json') != cases['manifest_sha256']:
+        raise ValueError('真实验证样本与固定清单指纹不一致')
     settings['initial_weights'] = cases['weights']
     settings['data_root'] = cases['data_root']
     if sha256(cases['weights']) != settings['initial_sha256']:
@@ -62,10 +67,9 @@ def main():
     tf.keras.utils.set_random_seed(42)
     with strategy.scope():
         functional = build_model(settings, args.variant)
-        model = AccumulatingModel(functional, samples=1)
+        model = AccumulatingModel(functional, samples=len(cases['targets']))
         compile_model(model, settings, steps=1)
     x, label = real_inputs(cases, settings, args.variant)
-    y = {name: tf.constant([label], dtype=tf.int64) for name in model.output}
     probabilities = model(x, training=False)['final'].numpy()
     assert probabilities.shape == (1, 3)
     np.testing.assert_allclose(probabilities.sum(), 1, atol=1e-6)
@@ -131,9 +135,19 @@ def main():
         checks.append('satellite_replacement_without_updates')
     before = {name: [v.numpy().copy() for v in model.get_layer(name).weights]
               for name in ('svi', 'sat') if name in [layer.name for layer in model.layers]}
-    training_metrics = model.train_on_batch(x, y, return_dict=True)
+    actual = [real_inputs(cases, settings, args.variant, index=i) for i in range(len(cases['targets']))]
+    batch_x = {key: tf.concat([item[0][key] for item in actual], axis=0) for key in x}
+    batch_y = {name: tf.constant([item[1] for item in actual], dtype=tf.int64) for name in model.output}
+    training_metrics = model.train_on_batch(batch_x, batch_y, return_dict=True)
     assert all(math.isfinite(value) for value in training_metrics.values())
     assert int(model.optimizer.iterations.numpy()) == 1
+    if args.gpus:
+        for variable in model.trainable_variables:
+            replicas = strategy.experimental_local_results(variable)
+            assert len(replicas) == args.gpus
+            for replica in replicas[1:]:
+                np.testing.assert_allclose(replicas[0].numpy(), replica.numpy(), rtol=1e-6, atol=1e-7)
+        checks.append('mirrored_parameter_updates')
     for name, original in before.items():
         assert any(not np.array_equal(a, b.numpy()) for a, b in zip(original, model.get_layer(name).weights))
     checks.append('real_image_backward_and_branch_updates')
@@ -145,7 +159,9 @@ def main():
     score = float(training_metrics[metric_name])
     callback.on_epoch_end(0, {f'val_{metric_name}': score, **training_metrics})
     expected = parameter_fingerprint(model)
-    model.train_on_batch(x, y)
+    started = time.monotonic()
+    model.train_on_batch(batch_x, batch_y)
+    step_seconds = time.monotonic() - started
     assert int(model.optimizer.iterations.numpy()) == 2
     restored = new_directory(output / 'restored')
     restored_callback = Checkpoints(model, restored, config, selection=True, resume=output)
@@ -153,9 +169,25 @@ def main():
     assert int(model.optimizer.iterations.numpy()) == 1
     assert parameter_fingerprint(model) == expected
     checks.append('checkpoint_weights_optimizer_roundtrip')
+    before_evaluation = parameter_fingerprint(model)
+    for condition in ('paired', 'wrong', 'noise', 'gaussian', 'zero'):
+        dataset, rows = make_dataset(cases['manifest'], 'validation', settings, args.variant,
+                                     settings['batch_size'], condition=condition)
+        batch, labels = next(iter(dataset))
+        assert set(batch) == set(model.input)
+        assert set(labels) == set(model.output)
+        np.testing.assert_array_equal(labels['final'], [int(row['label']) for row in rows[:settings['batch_size']]])
+        result = model.predict_on_batch(batch)
+        for probabilities in result.values():
+            assert probabilities.shape == (settings['batch_size'], 3)
+            assert np.isfinite(probabilities).all()
+            np.testing.assert_allclose(probabilities.sum(axis=1), 1.0, atol=1e-5)
+    assert parameter_fingerprint(model) == before_evaluation
+    checks.append('real_dataloader_all_satellite_conditions')
     write_json(output / 'verification.json', {'variant': args.variant, 'checks': checks,
                'image_shapes': {'ground': settings['ground_shape'], 'satellite': settings['satellite_shape']},
                'training_metrics': {key: float(value) for key, value in training_metrics.items()},
+               'training_batch_size': len(actual), 'steady_step_seconds': step_seconds,
                'parameters': model.count_params(), 'pretrained_sha256': settings['initial_sha256'],
                'tensorflow': tf.__version__, 'gpus': args.gpus})
     print('REAL_MODEL_VERIFIED', args.variant, checks, flush=True)

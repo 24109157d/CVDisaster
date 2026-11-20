@@ -1,0 +1,7 @@
+/.local-cache/
+/output/
+/checkpoints/
+/logs/
+__pycache__/
+/.pytest_cache/
+*.py[cod]

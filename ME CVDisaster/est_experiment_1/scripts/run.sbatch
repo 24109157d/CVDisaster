@@ -19,12 +19,15 @@ if (( $# != 1 )) || [[ ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 REPO=/scratch/liuzeyu/heyinxi/CVDisaster
 ENV=/scratch/liuzeyu/anaconda3/envs/cvdisaster_est
+CUDA_COMPILER=/software/nvidia/cuda/11.6
 COMMIT=$1
 DATA=/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN
 REFERENCE="$REPO/../runs/est-4087311/Author CVDisaster/disaster_perception_mapping"
 export CVDISASTER_COMMIT
 CVDISASTER_COMMIT=$(git -C "$REPO" rev-parse "${COMMIT}^{commit}")
 printf 'EST_JOB_START job_id=%s seed=626 commit=%s export=NIL\n' "$SLURM_JOB_ID" "$CVDISASTER_COMMIT"
+test -x "$CUDA_COMPILER/bin/ptxas"
+"$CUDA_COMPILER/bin/ptxas" --version
 RUN=/scratch/liuzeyu/heyinxi/runs/est-experiment-1-${SLURM_JOB_ID}
 MANIFEST="$RUN/manifest"
 mkdir "$RUN"
@@ -33,9 +36,10 @@ mkdir "$RUN/cache"
 export TMPDIR="$RUN/cache"
 export KERAS_HOME="$RUN/cache/keras"
 export XDG_CACHE_HOME="$RUN/cache"
-mkdir -p "$RUN/cache/cuda/nvvm/libdevice"
+mkdir -p "$RUN/cache/cuda/nvvm/libdevice" "$RUN/cache/cuda/bin"
 test -s "$ENV/lib/libdevice.10.bc"
 ln -s "$ENV/lib/libdevice.10.bc" "$RUN/cache/cuda/nvvm/libdevice/libdevice.10.bc"
+ln -s "$CUDA_COMPILER/bin/ptxas" "$RUN/cache/cuda/bin/ptxas"
 export XLA_FLAGS="--xla_gpu_cuda_data_dir=$RUN/cache/cuda"
 git -C "$REPO" archive "$CVDISASTER_COMMIT" 'ME CVDisaster/est_experiment_1' | tar -x -C "$RUN/source"
 cp -- "$0" "$RUN/submitted.sbatch"
@@ -45,10 +49,12 @@ export OMP_NUM_THREADS=8
 export OPENBLAS_NUM_THREADS=8
 export TF_NUM_INTRAOP_THREADS=8
 export TF_NUM_INTEROP_THREADS=2
-export PATH="$ENV/bin:$PATH"
+export PATH="$ENV/bin:$RUN/cache/cuda/bin:$PATH"
 export LD_LIBRARY_PATH="$ENV/lib"
 export PYTHONPATH="$RUN/cache/dependencies"
 cd "$RUN/source/ME CVDisaster/est_experiment_1"
+command -v ptxas
+ptxas --version
 nvidia-smi
 ASSETS="$REPO/ME CVDisaster/est_experiment_1/.local-cache"
 sha256sum --check "$ASSETS/wheels/SHA256SUMS"

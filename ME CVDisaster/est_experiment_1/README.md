@@ -68,6 +68,7 @@ Gaussian Noise 使用固定随机种子，裁切前均值 127.5、标准差 `sqr
 - `docs/运行说明.md`、`docs/本机检查记录.md`：命令与验证范围。
 - `scripts/prepare_assets.sh`：准备官方权重及离线依赖。
 - `scripts/run.sbatch`：唯一作业入口，在同一个 GPU 作业内完成真实模型检查、训练、评价及统计，提交需要用户授权。
+- `scripts/submit.sh`：核验超算源码提交，通过 `--export=NIL` 提交唯一作业。
 - `.local-cache/`：固定本机清单、历史诊断、依赖及测试缓存，已由 Git 忽略。
 
 ## 实现依据

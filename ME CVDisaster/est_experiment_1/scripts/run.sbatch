@@ -9,21 +9,30 @@
 #SBATCH --time=5-00:00:00
 #SBATCH --job-name=est_experiment_1
 #SBATCH --output=/scratch/liuzeyu/heyinxi/logs/est-experiment-1-%j.log
+#SBATCH --export=NIL
 
 set -euo pipefail
+export PATH=/usr/bin:/bin
+if (( $# != 1 )) || [[ ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
+    printf '必须提供一个完整 Git 提交号\n' >&2
+    exit 2
+fi
 REPO=/scratch/liuzeyu/heyinxi/CVDisaster
 ENV=/scratch/liuzeyu/anaconda3/envs/cvdisaster_est
-COMMIT=${CVDISASTER_COMMIT:?必须提供已同步的代码提交号}
+COMMIT=$1
 DATA=/scratch/liuzeyu/heyinxi/dataset/m1749324/CVIAN
 REFERENCE="$REPO/../runs/est-4087311/Author CVDisaster/disaster_perception_mapping"
 export CVDISASTER_COMMIT
 CVDISASTER_COMMIT=$(git -C "$REPO" rev-parse "${COMMIT}^{commit}")
+printf 'EST_JOB_START job_id=%s seed=626 commit=%s export=NIL\n' "$SLURM_JOB_ID" "$CVDISASTER_COMMIT"
 RUN=/scratch/liuzeyu/heyinxi/runs/est-experiment-1-${SLURM_JOB_ID}
 MANIFEST="$RUN/manifest"
 mkdir "$RUN"
 mkdir "$RUN/source"
 mkdir "$RUN/cache"
 export TMPDIR="$RUN/cache"
+export KERAS_HOME="$RUN/cache/keras"
+export XDG_CACHE_HOME="$RUN/cache"
 mkdir -p "$RUN/cache/cuda/nvvm/libdevice"
 test -s "$ENV/lib/libdevice.10.bc"
 ln -s "$ENV/lib/libdevice.10.bc" "$RUN/cache/cuda/nvvm/libdevice/libdevice.10.bc"
@@ -37,8 +46,8 @@ export OPENBLAS_NUM_THREADS=8
 export TF_NUM_INTRAOP_THREADS=8
 export TF_NUM_INTEROP_THREADS=2
 export PATH="$ENV/bin:$PATH"
-export LD_LIBRARY_PATH="$ENV/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export PYTHONPATH="$RUN/cache/dependencies${PYTHONPATH:+:$PYTHONPATH}"
+export LD_LIBRARY_PATH="$ENV/lib"
+export PYTHONPATH="$RUN/cache/dependencies"
 cd "$RUN/source/ME CVDisaster/est_experiment_1"
 nvidia-smi
 ASSETS="$REPO/ME CVDisaster/est_experiment_1/.local-cache"
